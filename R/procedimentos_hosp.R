@@ -26,19 +26,7 @@ url2 <- base(
   estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"), # pesquisa múltipla
   mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"), # pesquisa múltipla
   base = "CONS"
-)
-
-# iterar para múltiplos períodos e base
-
-# ano <- c("2019", "2020")
-#
-# url3 <- purrr::map(ano,
-#                 ~ base(
-#                 ano = .x,
-#                 estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"), # pesquisa múltipla
-#                 mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"), # pesquisa múltipla
-#                 base = "CONS")) |>
-#   purrr::flatten_chr()
+) # iterar para múltiplos períodos e base
 
 # download e leitura de dados ---------------------------------------------
 

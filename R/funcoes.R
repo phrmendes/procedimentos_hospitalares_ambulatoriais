@@ -54,7 +54,7 @@ unpack_read <- function(url, cols){
   return(x)
 }
 
-# função que cria dummies que indicam as tabelas base
+# função que cria dummies indicando as tabelas base
 
 bind <- function(a, b, c, d){
   

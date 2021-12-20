@@ -3,6 +3,7 @@
 # bibliotecas, funções e opções -------------------------------------------
 
 source(here::here("R/bibliotecas.R"))
+# source(here::here("R/procedimentos_hosp.R")) # atualização dos dados do shiny
 
 options(scipen = 999)
 
