@@ -2,8 +2,6 @@
 
 # bibliotecas e funções ---------------------------------------------------
 
-rm(list = ls())
-
 source("R/bibliotecas.R")
 source("R/funcoes.R")
 source("R/dic_tuss_db.R")
@@ -12,10 +10,14 @@ source("R/dic_tuss_db.R")
 
 # base DET (2020)
 
+estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+
+meses <- c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12")
+
 url <- base(
   ano = "2020",
-  estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"), # pesquisa múltipla
-  mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"), # pesquisa múltipla
+  estado = estados, # pesquisa múltipla
+  mes = meses, # pesquisa múltipla
   base = "DET"
 )
 
@@ -23,10 +25,10 @@ url <- base(
 
 url2 <- base(
   ano = "2020",
-  estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"), # pesquisa múltipla
-  mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"), # pesquisa múltipla
+  estado = estados, # pesquisa múltipla
+  mes = meses, # pesquisa múltipla
   base = "CONS"
-) # iterar para múltiplos períodos e base
+)
 
 # download e leitura de dados ---------------------------------------------
 
@@ -71,7 +73,8 @@ base_cons <- base_cons[, collapse::na_omit(base_cons)]
 
 # join
 
-base_hosp <- data.table::merge.data.table(base_det,
+base_hosp <- data.table::merge.data.table(
+  base_det,
   base_cons,
   on = "id_evento_atencao_saude"
 )
@@ -94,6 +97,7 @@ base_hosp <- data.table::merge.data.table(
   base_hosp,
   tabelas,
   by = "cd_procedimento",
+  all.x = T,
   allow.cartesian = TRUE
 )
 
@@ -111,15 +115,20 @@ base_hosp[
 
 # lista de procedimentos disponíveis --------------------------------------
 
-base_hosp |>
-  dplyr::distinct(termo) |>
-  dplyr::mutate(
-    termo = purrr::map_chr(
-      termo,
-      stringr::str_to_upper
-    )
-  ) |>
-  readr::write_csv("output/termos.csv")
+base_hosp[
+  ,
+  collapse::funique(.SD, cols = "termo")
+][
+  ,
+  "termo"
+][
+  ,
+  termo := furrr::future_map_chr(
+    termo,
+    stringr::str_to_upper
+  )
+] |>
+  data.table::fwrite("output/termos.csv")
 
 # estatísticas por estado -------------------------------------------------
 
@@ -136,16 +145,32 @@ base_hosp_uf <- base_hosp[
   keyby = c("cd_procedimento", "termo", "uf_prestador")
 ][
   ,
-  termo := future.apply::future_lapply(
+  termo := furrr::future_map_chr(
     termo,
     stringr::str_to_upper
+  )
+][
+  termo != "SEM INFORMAÇÕES"
+][
+  ,
+  .SD[.(uf_prestador = estados),
+    on = "uf_prestador"
+  ],
+  by = .(cd_procedimento, termo) # completando UF's faltantes
+][
+  ,
+  future.apply::future_lapply(
+    .SD,
+    collapse::replace_NA,
+    value = 0
   )
 ]
 
 data.table::setnames(
-  base_hosp_uf, 
-  old = "uf_prestador", 
-  new = "categoria")
+  base_hosp_uf,
+  old = "uf_prestador",
+  new = "categoria"
+)
 
 data.table::fwrite(
   base_hosp_uf,
@@ -153,6 +178,8 @@ data.table::fwrite(
 )
 
 # estatísticas por faixa etária -------------------------------------------
+
+faixas <- c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a 9", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I.")
 
 base_hosp_idade <- base_hosp[
   ,
@@ -167,16 +194,37 @@ base_hosp_idade <- base_hosp[
   keyby = c("cd_procedimento", "termo", "faixa_etaria")
 ][
   ,
-  termo := future.apply::future_lapply(
+  termo := furrr::future_map_chr(
     termo,
     stringr::str_to_upper
+  )
+][
+  ,
+  faixa_etaria := tidyfast::dt_case_when(
+    faixa_etaria == "<1" ~ "< 1",
+    faixa_etaria == "80 ou mais" ~ "80 <",
+    TRUE ~ faixa_etaria
+  )
+][
+  ,
+  .SD[.(faixa_etaria = faixas),
+    on = "faixa_etaria"
+  ],
+  by = .(cd_procedimento, termo) # completando faixas etárias faltantes
+][
+  ,
+  future.apply::future_lapply(
+    .SD,
+    collapse::replace_NA,
+    value = 0
   )
 ]
 
 data.table::setnames(
-  base_hosp_idade, 
-  old = "faixa_etaria", 
-  new = "categoria")
+  base_hosp_idade,
+  old = "faixa_etaria",
+  new = "categoria"
+)
 
 data.table::fwrite(
   base_hosp_idade,
@@ -196,12 +244,32 @@ base_hosp_sexo <- base_hosp[
   ,
   mean_vl := round(tot_vl / tot_qt, 2),
   keyby = c("cd_procedimento", "termo", "sexo")
+][
+  ,
+  sexo := tidyfast::dt_case_when(
+    sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
+    TRUE ~ sexo
+  )
+][
+  ,
+  .SD[.(sexo = c("Masculino", "Feminino", "N. I.")),
+    on = "sexo"
+  ],
+  by = .(cd_procedimento, termo) # completando faixas etárias faltantes
+][
+  ,
+  future.apply::future_lapply(
+    .SD,
+    collapse::replace_NA,
+    value = 0
+  )
 ]
 
 data.table::setnames(
-  base_hosp_sexo, 
-  old = "sexo", 
-  new = "categoria")
+  base_hosp_sexo,
+  old = "sexo",
+  new = "categoria"
+)
 
 data.table::fwrite(
   base_hosp_sexo,

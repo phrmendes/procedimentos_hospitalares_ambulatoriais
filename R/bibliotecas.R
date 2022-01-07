@@ -18,9 +18,12 @@ pacman::p_load(data.table,
                shinydashboard,
                plotly,
                here,
-               devtools,
+               ggthemes,
+               forcats,
                dashboardthemes,
                shinydashboardPlus,
+               geobr,
+               sf,
+               shinyjs,
+               MetBrewer,
                install = F)
-
-# devtools::install_github("BlakeRMills/MetBrewer") 

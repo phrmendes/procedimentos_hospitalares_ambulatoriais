@@ -3,13 +3,13 @@
 # bibliotecas, funções e opções -------------------------------------------
 
 source(here::here("R/bibliotecas.R"))
-# source(here::here("R/procedimentos_hosp.R")) # atualização dos dados do shiny
 
 options(scipen = 999)
 
 # variáveis ---------------------------------------------------------------
 
 hosp_db <- list(
+  # ------------------------------------------------------------- #
   `Faixa Etária` = readr::read_csv(here::here("output/base_hosp_idade.csv")) |>
     dplyr::rename(
       `Quantidade total` = tot_qt,
@@ -17,11 +17,6 @@ hosp_db <- list(
       `Valor médio` = mean_vl
     ) |>
     dplyr::mutate(
-      categoria = dplyr::case_when(
-        categoria == "<1" ~ "< 1",
-        categoria == "80 ou mais" ~ "80 <",
-        TRUE ~ as.character(categoria)
-      ),
       categoria = factor(
         categoria,
         levels = c(
@@ -37,58 +32,78 @@ hosp_db <- list(
           "60 a 69",
           "70 a 79",
           "80 <",
-          "Não identificado"
+          "N. I."
         ) # ordenando categorias de faixa etária
       )
     ) |>
     dplyr::arrange(categoria),
+  # ------------------------------------------------------------- #
   Sexo = readr::read_csv(here::here("output/base_hosp_sexo.csv")) |>
-    dplyr::mutate(categoria = dplyr::case_when(
-      is.na(categoria) ~ "Não informado",
-      TRUE ~ as.character(categoria)
-    )) |>
     dplyr::rename(
       `Quantidade total` = tot_qt,
       `Valor total` = tot_vl,
       `Valor médio` = mean_vl
     ),
+  # ------------------------------------------------------------- #
   UF = readr::read_csv(here::here("output/base_hosp_uf.csv")) |>
     dplyr::rename(
       `Quantidade total` = tot_qt,
       `Valor total` = tot_vl,
       `Valor médio` = mean_vl
     ),
+  # ------------------------------------------------------------- #
   procedimentos = readr::read_csv(here::here("output/termos.csv")) |>
     purrr::flatten_chr(),
+  # ------------------------------------------------------------- #
   categoria = c("Faixa etária", "Sexo", "UF"),
+  # ------------------------------------------------------------- #
   estatistica = c("Quantidade total", "Valor total", "Valor médio")
 )
 
 # shiny -------------------------------------------------------------------
 
 header <- shinydashboard::dashboardHeader(
-  title = "Procedimentos Hospitalares"
+  title = tags$a(
+    title = "Abramge",
+    href = "https://www.abramge.com.br/",
+    tags$img(
+      src = "https://abramge.com.br/portal/templates/abramge/images/logo-abramge-55-anos.png",
+      height = 45
+    ), # nome e logo da Abramge
+    tags$style(
+      type = "text/css",
+      ".shiny-output-error { visibility: hidden; }",
+      ".shiny-output-error:before { visibility: hidden; }"
+    ) # desativando mensagens de erro
+  )
 )
 
+# menu lateral do dashboard ---------------- #
 sidebar <- shinydashboard::dashboardSidebar(
   shinydashboard::sidebarMenu(
     shinydashboard::menuItem(
       "Procedimentos Hospitalares",
       tabName = "hosp",
       icon = icon("chart-bar")
+    ),
+    shinydashboard::menuItem(
+      "Procedimentos Ambulatoriais",
+      tabName = "amb",
+      icon = icon("chart-bar")
     )
   )
-) # menu lateral do dashboard
+)
 
 body <- shinydashboard::dashboardBody(
   shinydashboard::tabItems(
     shinydashboard::tabItem(
+      # seleção de parâmetros ----------------- #
       tabName = "hosp",
       h2("Procedimentos Hospitalares"),
       shiny::fluidRow(
         shinydashboard::box(
           title = "Parâmetros",
-          width = 2,
+          width = 6,
           solidHeader = TRUE,
           collapsible = TRUE,
           shiny::selectizeInput(
@@ -109,35 +124,50 @@ body <- shinydashboard::dashboardBody(
             selected = NULL,
             choices = hosp_db$estatistica
           )
-        ), # caixas de seleção de parâmetros
+        ),
+        # gráficos ------------------------------ #
+        shiny::conditionalPanel(
+          condition = "input.estatistica == 'Quantidade total' & input.categoria == 'UF'",
+          shinydashboard::box(
+            plotly::plotlyOutput("db_map"),
+            width = 6,
+            align = "center"
+          )
+        ) # mostra mapa apenas para quando a categoria "UF" é selecionada
+      ),
+      shiny::fluidRow(
         shinydashboard::box(
-          plotly::plotlyOutput("db"),
-          height = 420,
-          width = 10,
+          plotly::plotlyOutput("db_bar"),
+          width = 12,
           align = "center"
-        ), # gráficos
+        )
       )
     )
   )
 )
 
-ui <- shinydashboard::dashboardPage(header, sidebar, body)
+ui <- shinydashboard::dashboardPage(
+  title = "Abramge", # título da aba do dashboard
+  header, sidebar, body
+)
 
 server <- function(input, output, session) {
-  output$db <- plotly::renderPlotly({
+  output$db_bar <- plotly::renderPlotly({
     if (input$categoria == "Sexo") {
       dados <- hosp_db$Sexo
     } else if (input$categoria == "UF") {
       dados <- hosp_db$UF
     } else {
       dados <- hosp_db$`Faixa Etária`
-    } 
+    }
 
     dados <- dados |>
       dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>
-      dplyr::select(c(categoria, starts_with(glue::glue("{input$estatistica}"))))
+      dplyr::select(
+        c(categoria, starts_with(glue::glue("{input$estatistica}")))
+      )
 
-    plot <- dados |>
+    plot_bar <- dados |>
       ggplot() +
       geom_col(
         aes_string(
@@ -151,16 +181,70 @@ server <- function(input, output, session) {
           glue::glue("{input$estatistica} de procedimentos por {input$categoria}")
         )
       ) +
+      theme_minimal() +
       xlab(glue::glue("{input$categoria}")) +
       theme(legend.position = "none") +
       scale_fill_manual(values = MetBrewer::met.brewer(
         name = "Ingres",
-        n = 26,
+        n = 27,
         type = "continuous"
       ))
 
-    plotly::ggplotly(plot)
-  })
+    plotly::ggplotly(plot_bar)
+  }) # gráfico de barras
+
+  output$db_map <- plotly::renderPlotly({
+    dados <- hosp_db$UF
+
+    # download de shapefiles de estados
+    # geobr::read_state(
+    #   code_state = "all",
+    #   showProgress = FALSE
+    # ) |>
+    #   dplyr::select(code_state, abbrev_state, geom) |>
+    #   dplyr::rename(categoria = abbrev_state) |>
+    #   saveRDS(file = "output/geom_ufs.rds")
+
+    ufs <- readRDS(here::here("output/geom_ufs.rds"))
+
+    plot_map <- dados |>
+      dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>
+      dplyr::select(
+        c(categoria, starts_with(glue::glue("{input$estatistica}")))
+      ) |>
+      dplyr::left_join(
+        ufs,
+        by = "categoria"
+      ) |>
+      # dplyr::filter(termo == "ANESTESIAS") |>
+      ggplot() +
+      geom_sf(
+        aes(
+          geometry = geom,
+          fill = `Quantidade total`
+        ),
+        color = NA
+      ) +
+      theme_minimal() +
+      scale_fill_gradientn(colors = MetBrewer::met.brewer("Ingres")) +
+      theme(
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+      ) +
+      ggtitle(
+        stringr::str_to_upper(
+          glue::glue(
+            "{input$estatistica} de procedimentos por {input$categoria}"
+          )
+        )
+      )
+
+    plotly::ggplotly(plot_map)
+  }) # mapa
 
   shiny::updateSelectizeInput(
     session,
