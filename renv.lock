@@ -5,6 +5,10 @@
       {
         "Name": "CRAN",
         "URL": "https://cran.rstudio.com"
+      },
+      {
+        "Name": "CRANextra",
+        "URL": "http://www.stats.ox.ac.uk/pub/RWin"
       }
     ]
   },
@@ -40,14 +44,9 @@
     "MetBrewer": {
       "Package": "MetBrewer",
       "Version": "0.1.0",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteRepo": "MetBrewer",
-      "RemoteUsername": "BlakeRMills",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "aff2f68e19ced559f991e467ebab0102daf15510",
-      "Hash": "f0d5adcf555cb04e0a9671928cb0be53"
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "1c71a9a7659f56389404aad6dc8ea8b0"
     },
     "R.cache": {
       "Package": "R.cache",
@@ -490,6 +489,20 @@
       "Repository": "CRAN",
       "Hash": "6efd734b14c6471cfe443345f3e35e29"
     },
+    "googleAuthR": {
+      "Package": "googleAuthR",
+      "Version": "1.4.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "3deb4598caae9bf76c0a1ffd96889f81"
+    },
+    "googleComputeEngineR": {
+      "Package": "googleComputeEngineR",
+      "Version": "0.3.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "8e1141a63865c70ee81f17d07b0a0bb4"
+    },
     "googledrive": {
       "Package": "googledrive",
       "Version": "2.0.0",
@@ -681,10 +694,10 @@
     },
     "memoise": {
       "Package": "memoise",
-      "Version": "2.0.0",
+      "Version": "2.0.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "a0bc51650201a56d00a4798523cc91b3"
+      "Hash": "e2817ccf4a065c5d9d7f2cfbe7c1d78c"
     },
     "mgcv": {
       "Package": "mgcv",
@@ -849,10 +862,10 @@
     },
     "remotes": {
       "Package": "remotes",
-      "Version": "2.4.1",
+      "Version": "2.4.2",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "feaca31e417db79fd1832e25b51a7717"
+      "Hash": "227045be9aee47e6dda9bb38ac870d67"
     },
     "renv": {
       "Package": "renv",
