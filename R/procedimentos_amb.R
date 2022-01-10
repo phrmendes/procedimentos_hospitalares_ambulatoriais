@@ -1,4 +1,4 @@
-#### BASE CONSOLIDADA DE PROCEDIMENTOS HOSPITALARES POR UF ####
+#### BASE CONSOLIDADA DE PROCEDIMENTOS ambITALARES POR UF ####
 
 # bibliotecas e funções ---------------------------------------------------
 
@@ -12,7 +12,7 @@ estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "
 
 meses <- c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12")
 
-url <- "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/"
+url <- "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/"
 
 # base DET (2020)
 
@@ -41,17 +41,15 @@ memory.size(max = 10^12)
 future::plan(multisession) # habilitando multithread
 
 base_det <- furrr::future_map_dfr(
-  url,
+  urls,
   ~ unpack_read(
     .x,
-    c(
-      "CD_PROCEDIMENTO",
-      "ID_EVENTO_ATENCAO_SAUDE",
+    c("ID_EVENTO_ATENCAO_SAUDE",
       "UF_PRESTADOR",
+      "CD_PROCEDIMENTO",
       "CD_TABELA_REFERENCIA",
       "QT_ITEM_EVENTO_INFORMADO",
-      "VL_ITEM_EVENTO_INFORMADO"
-    )
+      "VL_ITEM_EVENTO_INFORMADO")
   )
 ) |> # função de importação multithread
   janitor::clean_names()
@@ -59,16 +57,14 @@ base_det <- furrr::future_map_dfr(
 base_det <- base_det[, collapse::na_omit(base_det)]
 
 base_cons <- furrr::future_map_dfr(
-  url2,
+  urls2,
   ~ unpack_read(
     .x,
-    c(
-      "ID_EVENTO_ATENCAO_SAUDE",
+    c("ID_EVENTO_ATENCAO_SAUDE",
       "FAIXA_ETARIA",
       "SEXO",
       "TEMPO_DE_PERMANENCIA",
-      "CD_CARATER_ATENDIMENTO"
-    )
+      "CD_CARATER_ATENDIMENTO")
   )
 ) |> # função de importação multithread
   janitor::clean_names()
@@ -77,13 +73,13 @@ base_cons <- base_cons[, collapse::na_omit(base_cons)]
 
 # join
 
-base_hosp <- data.table::merge.data.table(
+base_amb <- data.table::merge.data.table(
   base_det,
   base_cons,
   on = "id_evento_atencao_saude"
 )
 
-base_hosp <- base_hosp[
+base_amb <- base_amb[
   cd_tabela_referencia != 0 &
     cd_tabela_referencia != 9 &
     cd_tabela_referencia != 98,
@@ -92,20 +88,19 @@ base_hosp <- base_hosp[
 
 # join por dicionário -----------------------------------------------------
 
-base_hosp[
+base_amb[
   ,
   cd_procedimento := as.numeric(cd_procedimento)
 ]
 
-base_hosp <- data.table::merge.data.table(
-  base_hosp,
+base_amb <- data.table::merge.data.table(
+  base_amb,
   tabelas,
   by = "cd_procedimento",
-  all.x = T,
   allow.cartesian = TRUE
 )
 
-base_hosp[
+base_amb[
   ,
   ":="(termo = collapse::replace_NA(
     termo,
@@ -119,7 +114,7 @@ base_hosp[
 
 # lista de procedimentos disponíveis --------------------------------------
 
-base_hosp[
+base_amb[
   ,
   collapse::funique(.SD, cols = "termo")
 ][
@@ -132,11 +127,25 @@ base_hosp[
     stringr::str_to_upper
   )
 ] |>
-  data.table::fwrite("output/termos_hosp.csv")
+  data.table::fwrite("output/termos_amb.csv")
 
 # estatísticas por estado -------------------------------------------------
 
-base_hosp_uf <- base_hosp[
+base_amb_uf <- base_amb[
+  ,
+  .(tot_qt = collapse::fsum(qt_item_evento_informado),
+    tot_vl = collapse::fsum(vl_item_evento_informado)),
+  keyby = c("cd_procedimento", "termo", "uf_prestador")
+][
+  ,
+  mean_vl := tot_vl/tot_qt,
+  keyby = c("cd_procedimento", "termo", "uf_prestador")
+]
+
+data.table::fwrite(base_amb_uf,
+                   "output/base_amb_uf.csv")
+
+base_amb_uf <- base_amb[
   ,
   .(
     tot_qt = collapse::fsum(qt_item_evento_informado),
@@ -158,7 +167,7 @@ base_hosp_uf <- base_hosp[
 ][
   ,
   .SD[.(uf_prestador = estados),
-    on = "uf_prestador"
+      on = "uf_prestador"
   ],
   by = .(cd_procedimento, termo) # completando UF's faltantes
 ][
@@ -171,21 +180,21 @@ base_hosp_uf <- base_hosp[
 ]
 
 data.table::setnames(
-  base_hosp_uf,
+  base_amb_uf,
   old = "uf_prestador",
   new = "categoria"
 )
 
 data.table::fwrite(
-  base_hosp_uf,
-  "output/base_hosp_uf.csv"
+  base_amb_uf,
+  "output/base_amb_uf.csv"
 )
 
 # estatísticas por faixa etária -------------------------------------------
 
 faixas <- c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a 9", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I.")
 
-base_hosp_idade <- base_hosp[
+base_amb_idade <- base_amb[
   ,
   .(
     tot_qt = collapse::fsum(qt_item_evento_informado),
@@ -212,7 +221,7 @@ base_hosp_idade <- base_hosp[
 ][
   ,
   .SD[.(faixa_etaria = faixas),
-    on = "faixa_etaria"
+      on = "faixa_etaria"
   ],
   by = .(cd_procedimento, termo) # completando faixas etárias faltantes
 ][
@@ -225,19 +234,19 @@ base_hosp_idade <- base_hosp[
 ]
 
 data.table::setnames(
-  base_hosp_idade,
+  base_amb_idade,
   old = "faixa_etaria",
   new = "categoria"
 )
 
 data.table::fwrite(
-  base_hosp_idade,
-  "output/base_hosp_idade.csv"
+  base_amb_idade,
+  "output/base_amb_idade.csv"
 )
 
 # estatísticas por sexo ---------------------------------------------------
 
-base_hosp_sexo <- base_hosp[
+base_amb_sexo <- base_amb[
   ,
   .(
     tot_qt = collapse::fsum(qt_item_evento_informado),
@@ -257,7 +266,7 @@ base_hosp_sexo <- base_hosp[
 ][
   ,
   .SD[.(sexo = c("Masculino", "Feminino", "N. I.")),
-    on = "sexo"
+      on = "sexo"
   ],
   by = .(cd_procedimento, termo) # completando faixas etárias faltantes
 ][
@@ -270,12 +279,12 @@ base_hosp_sexo <- base_hosp[
 ]
 
 data.table::setnames(
-  base_hosp_sexo,
+  base_amb_sexo,
   old = "sexo",
   new = "categoria"
 )
 
 data.table::fwrite(
-  base_hosp_sexo,
-  "output/base_hosp_sexo.csv"
+  base_amb_sexo,
+  "output/base_amb_sexo.csv"
 )

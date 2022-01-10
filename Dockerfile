@@ -7,9 +7,9 @@ RUN apt update -y && apt upgrade -y && apt clean -y && apt install -y  libudunit
 
 RUN mkdir /home/shiny/output
 
-COPY R/app.R /home/shiny
+COPY app.R /home/shiny
 
-COPY output/* /home/shiny/output
+COPY procedimentos_hospitalares/output/* /home/shiny/output
 
 RUN Rscript -e 'install.packages(c("shiny", "pacman", "glue", "usethis", "shinydashboard", "plotly", "shinydashboardPlus", "geobr", "sf", "MetBrewer", "here"))'
 

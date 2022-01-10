@@ -1,9 +1,8 @@
 # função para seleção de bases por ano, estado, mês e período
 
-base <- function(ano, estado, mes, base){
-  
+base <- function(ano, estado, mes, base, url) {
   x <- tibble::tibble(
-    a = glue::glue("http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/{ano}/"),
+    a = glue::glue("{url}{ano}/"),
     b = estado,
     c = glue::glue("_{ano}"),
   ) |> # criando tibble base para operação
@@ -19,61 +18,58 @@ base <- function(ano, estado, mes, base){
         )
       )
     ) |>
-    tidyr::unnest(cols = c(data)) |> 
+    tidyr::unnest(cols = c(data)) |>
     tidyr::unite("url",
-                 c(a, b, d, c, e, f),
-                 sep = ""
+      c(a, b, d, c, e, f),
+      sep = ""
     ) |> # juntando tudo em uma url só
     purrr::flatten_chr() # criando um vetor de urls
-  
+
   return(x)
 }
 
 # função de descompactação e leitura de arquivos do ftp
 
-unpack_read <- function(url, cols){
-  
+unpack_read <- function(url, cols) {
   temp <- tempfile()
-  
+
   tempdir <- tempdir()
-  
-  temp <- curl::curl_download(url = url,
-                              destfile = glue::glue("{temp}.zip"))
-  
-  temp <- unzip(zipfile = temp,
-                exdir = tempdir)
-  
+
+  temp <- curl::curl_download(
+    url = url,
+    destfile = glue::glue("{temp}.zip")
+  )
+
+  temp <- unzip(
+    zipfile = temp,
+    exdir = tempdir
+  )
+
   gc()
-  
-  x <- fread(input = temp,
-             encoding = "UTF-8",
-             select = cols,
-             sep = ";",
-             dec = ",")
-  
+
+  x <- fread(
+    input = temp,
+    encoding = "UTF-8",
+    select = cols,
+    sep = ";",
+    dec = ","
+  )
+
   return(x)
 }
 
 # função que cria dummies que indicam as tabelas base
 
-bind <- function(a, b, c, d){
-  
-  a <- a |> 
-    dplyr::mutate(tabela = "19")
-  
-  b <- b |> 
-    dplyr::mutate(tabela = "20")
-  
-  c <- c |> 
-    dplyr::mutate(tabela = "22")
-  
-  d <- d |> 
-    dplyr::mutate(tabela = "63")
-  
-  x <- dplyr::bind_rows(a, b, c, d)
-  
+bind <- function(a, b, c, d) {
+  x <- list(
+    a = a |> dplyr::mutate(tabela = "19"),
+    b = b |> dplyr::mutate(tabela = "20"),
+    c = c |> dplyr::mutate(tabela = "22"),
+    d = d |> dplyr::mutate(tabela = "63")
+  ) |>
+    dplyr::bind_rows()
+
   return(x)
-  
 }
 
 # função que lê todos os .csv de uma pasta
@@ -81,7 +77,8 @@ bind <- function(a, b, c, d){
 load_data <- function(x) {
   fs::dir_ls(x, regexp = "*.csv") |>
     purrr::map(readr::read_delim,
-               delim = ";")
+      delim = ";"
+    )
 }
 
 # not in
