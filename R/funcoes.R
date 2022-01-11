@@ -1,6 +1,6 @@
 # função para seleção de bases por ano, estado, mês e período
 
-base <- function(ano, estado, mes, base, url) {
+base <- function(ano, estado, mes, base, url, proc) {
   x <- tibble::tibble(
     a = glue::glue("{url}{ano}/"),
     b = estado,
@@ -14,7 +14,7 @@ base <- function(ano, estado, mes, base, url) {
         data,
         ~ tibble(
           e = mes, # criando coluna de meses em cada subtiblle
-          f = glue::glue("_HOSP_{base}.zip")
+          f = glue::glue("_{proc}_{base}.zip")
         )
       )
     ) |>

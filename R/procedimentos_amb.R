@@ -8,30 +8,18 @@ source("R/dic_tuss_db.R")
 
 # definindo termos da buscas no dados abertos -----------------------------
 
-estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+bases <- c("DET", "CONS")
 
-meses <- c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12")
-
-url <- "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/"
-
-# base DET (2020)
-
-urls <- base(
-  ano = "2020",
-  estado = estados,
-  mes = meses,
-  base = "DET",
-  url = url
-)
-
-# base CONS (2020)
-
-urls2 <- base(
-  ano = "2020",
-  estado = estados,
-  mes = meses,
-  base = "CONS",
-  url = url
+urls <- purrr::map(
+  bases,
+  ~ base(
+    ano = "2020",
+    estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
+    mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
+    base = .x,
+    url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/",
+    proc = "AMB"
+  )
 )
 
 # download e leitura de dados ---------------------------------------------
@@ -41,15 +29,17 @@ memory.size(max = 10^12)
 future::plan(multisession) # habilitando multithread
 
 base_det <- furrr::future_map_dfr(
-  urls,
+  urls[[1]],
   ~ unpack_read(
     .x,
-    c("ID_EVENTO_ATENCAO_SAUDE",
+    c(
+      "ID_EVENTO_ATENCAO_SAUDE",
       "UF_PRESTADOR",
       "CD_PROCEDIMENTO",
       "CD_TABELA_REFERENCIA",
       "QT_ITEM_EVENTO_INFORMADO",
-      "VL_ITEM_EVENTO_INFORMADO")
+      "VL_ITEM_EVENTO_INFORMADO"
+    )
   )
 ) |>
   janitor::clean_names()
@@ -57,14 +47,16 @@ base_det <- furrr::future_map_dfr(
 base_det <- base_det[, collapse::na_omit(base_det)]
 
 base_cons <- furrr::future_map_dfr(
-  urls2,
+  urls[[2]],
   ~ unpack_read(
     .x,
-    c("ID_EVENTO_ATENCAO_SAUDE",
+    c(
+      "ID_EVENTO_ATENCAO_SAUDE",
       "FAIXA_ETARIA",
       "SEXO",
       "TEMPO_DE_PERMANENCIA",
-      "CD_CARATER_ATENDIMENTO")
+      "CD_CARATER_ATENDIMENTO"
+    )
   )
 ) |>
   janitor::clean_names()
@@ -133,17 +125,21 @@ base_amb[
 
 base_amb_uf <- base_amb[
   ,
-  .(tot_qt = collapse::fsum(qt_item_evento_informado),
-    tot_vl = collapse::fsum(vl_item_evento_informado)),
+  .(
+    tot_qt = collapse::fsum(qt_item_evento_informado),
+    tot_vl = collapse::fsum(vl_item_evento_informado)
+  ),
   keyby = c("cd_procedimento", "termo", "uf_prestador")
 ][
   ,
-  mean_vl := tot_vl/tot_qt,
+  mean_vl := tot_vl / tot_qt,
   keyby = c("cd_procedimento", "termo", "uf_prestador")
 ]
 
-data.table::fwrite(base_amb_uf,
-                   "output/base_amb_uf.csv")
+data.table::fwrite(
+  base_amb_uf,
+  "output/base_amb_uf.csv"
+)
 
 base_amb_uf <- base_amb[
   ,
@@ -167,7 +163,7 @@ base_amb_uf <- base_amb[
 ][
   ,
   .SD[.(uf_prestador = estados),
-      on = "uf_prestador"
+    on = "uf_prestador"
   ],
   by = .(cd_procedimento, termo) # completando UF's faltantes
 ][
@@ -221,7 +217,7 @@ base_amb_idade <- base_amb[
 ][
   ,
   .SD[.(faixa_etaria = faixas),
-      on = "faixa_etaria"
+    on = "faixa_etaria"
   ],
   by = .(cd_procedimento, termo) # completando faixas etárias faltantes
 ][
@@ -266,7 +262,7 @@ base_amb_sexo <- base_amb[
 ][
   ,
   .SD[.(sexo = c("Masculino", "Feminino", "N. I.")),
-      on = "sexo"
+    on = "sexo"
   ],
   by = .(cd_procedimento, termo) # completando faixas etárias faltantes
 ][

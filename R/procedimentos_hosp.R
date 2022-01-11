@@ -8,30 +8,18 @@ source("R/dic_tuss_db.R")
 
 # definindo termos da buscas no dados abertos -----------------------------
 
-estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+bases <- c("DET", "CONS")
 
-meses <- c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12")
-
-url <- "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/"
-
-# base DET (2020)
-
-urls <- base(
-  ano = "2020",
-  estado = estados,
-  mes = meses,
-  base = "DET",
-  url = url
-)
-
-# base CONS (2020)
-
-urls2 <- base(
-  ano = "2020",
-  estado = estados,
-  mes = meses,
-  base = "CONS",
-  url = url
+urls <- purrr::map(
+  bases,
+  ~ base(
+    ano = "2020",
+    estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
+    mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
+    base = .x,
+    url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/",
+    proc = "HOSP"
+  )
 )
 
 # download e leitura de dados ---------------------------------------------
@@ -41,7 +29,7 @@ memory.size(max = 10^12)
 future::plan(multisession) # habilitando multithread
 
 base_det <- furrr::future_map_dfr(
-  url,
+  urls[[1]],
   ~ unpack_read(
     .x,
     c(
@@ -59,7 +47,7 @@ base_det <- furrr::future_map_dfr(
 base_det <- base_det[, collapse::na_omit(base_det)]
 
 base_cons <- furrr::future_map_dfr(
-  url2,
+  urls[[2]],
   ~ unpack_read(
     .x,
     c(
