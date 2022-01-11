@@ -1,5 +1,5 @@
 # base image https://hub.docker.com/u/rocker/
-# docker build -t procedimentos_hosp .
+# docker build -t phrmendes12/proc_hosp:10_01_22 .
 
 FROM rocker/shiny-verse:latest
 
@@ -9,7 +9,7 @@ RUN mkdir /home/shiny/output
 
 COPY app.R /home/shiny
 
-COPY procedimentos_hospitalares/output/* /home/shiny/output
+COPY output/* /home/shiny/output
 
 RUN Rscript -e 'install.packages(c("shiny", "pacman", "glue", "usethis", "shinydashboard", "plotly", "shinydashboardPlus", "geobr", "sf", "MetBrewer", "here"))'
 
@@ -21,4 +21,4 @@ EXPOSE 3838
 
  CMD ["Rscript", "-e", "shiny::runApp('/home/shiny', host = '0.0.0.0', port = 3838)"]
 
-# docker run -d --rm -p 3838:3838 phrmendes12/proc_hosp:10-01-22
+# docker run -d --rm -p 3838:3838 phrmendes12/proc_hosp:10_01_22

@@ -27,6 +27,5 @@ pacman::p_load(
   sf,
   MetBrewer,
   memoise,
-  googleComputeEngineR,
   install = F
 )

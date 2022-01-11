@@ -12,7 +12,7 @@ base <- function(ano, estado, mes, base, url, proc) {
       d = glue::glue("/{b}"), # adicionando coluna auxiliar para união de url
       data = purrr::map(
         data,
-        ~ tibble(
+        ~ tibble::tibble(
           e = mes, # criando coluna de meses em cada subtiblle
           f = glue::glue("_{proc}_{base}.zip")
         )
@@ -35,9 +35,16 @@ unpack_read <- function(url, cols) {
 
   tempdir <- tempdir()
 
-  temp <- curl::curl_download(
+  # temp <- curl::curl_download(
+  #   url = url,
+  #   destfile = glue::glue("{temp}.zip")
+  # )
+
+  download.file(
     url = url,
-    destfile = glue::glue("{temp}.zip")
+    destfile = temp,
+    method = "wget",
+    quiet = T
   )
 
   temp <- unzip(
@@ -45,9 +52,7 @@ unpack_read <- function(url, cols) {
     exdir = tempdir
   )
 
-  gc()
-
-  x <- fread(
+  x <- data.table::fread(
     input = temp,
     encoding = "UTF-8",
     select = cols,

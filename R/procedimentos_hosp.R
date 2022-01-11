@@ -14,10 +14,10 @@ urls <- purrr::map(
   bases,
   ~ base(
     ano = "2020",
-    estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
+    estado = c("AC", "AL", "AM"), #, "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
     mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
     base = .x,
-    url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/",
+    url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
     proc = "HOSP"
   )
 )
