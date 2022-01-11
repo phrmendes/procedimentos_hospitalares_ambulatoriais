@@ -51,7 +51,7 @@ base_det <- furrr::future_map_dfr(
       "QT_ITEM_EVENTO_INFORMADO",
       "VL_ITEM_EVENTO_INFORMADO")
   )
-) |> # função de importação multithread
+) |>
   janitor::clean_names()
 
 base_det <- base_det[, collapse::na_omit(base_det)]
@@ -66,7 +66,7 @@ base_cons <- furrr::future_map_dfr(
       "TEMPO_DE_PERMANENCIA",
       "CD_CARATER_ATENDIMENTO")
   )
-) |> # função de importação multithread
+) |>
   janitor::clean_names()
 
 base_cons <- base_cons[, collapse::na_omit(base_cons)]
