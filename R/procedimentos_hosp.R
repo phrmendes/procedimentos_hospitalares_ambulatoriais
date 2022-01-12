@@ -14,7 +14,7 @@ urls <- purrr::map(
   bases,
   ~ base(
     ano = "2020",
-    estado = c("AC", "AL", "AM"), #, "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
+    estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
     mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
     base = .x,
     url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
@@ -26,7 +26,7 @@ urls <- purrr::map(
 
 memory.size(max = 10^12)
 
-future::plan(multicore) # habilitando multithread
+future::plan(multisession) # habilitando multithread
 
 base_det <- furrr::future_map_dfr(
   urls[[1]],
@@ -54,7 +54,6 @@ base_cons <- furrr::future_map_dfr(
       "ID_EVENTO_ATENCAO_SAUDE",
       "FAIXA_ETARIA",
       "SEXO",
-      "TEMPO_DE_PERMANENCIA",
       "CD_CARATER_ATENDIMENTO"
     )
   )
@@ -247,7 +246,7 @@ base_hosp_sexo <- base_hosp[
   .SD[.(sexo = c("Masculino", "Feminino", "N. I.")),
     on = "sexo"
   ],
-  by = .(cd_procedimento, termo) # completando faixas etárias faltantes
+  by = .(cd_procedimento, termo) # completando sexos faltantes
 ][
   ,
   future.apply::future_lapply(

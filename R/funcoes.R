@@ -35,30 +35,32 @@ unpack_read <- function(url, cols) {
 
   tempdir <- tempdir()
 
-  # temp <- curl::curl_download(
-  #   url = url,
-  #   destfile = glue::glue("{temp}.zip")
-  # )
-
   download.file(
     url = url,
     destfile = temp,
-    method = "wget",
+    method = "auto",
     quiet = T
   )
 
-  temp <- unzip(
+  csv_file <- unzip(
     zipfile = temp,
     exdir = tempdir
   )
 
   x <- data.table::fread(
-    input = temp,
+    input = csv_file,
     encoding = "UTF-8",
     select = cols,
     sep = ";",
     dec = ","
   )
+
+  purrr::walk(
+    c(temp, csv_file),
+    ~ fs::file_delete(glue::glue("{.x}"))
+  )
+
+  gc()
 
   return(x)
 }

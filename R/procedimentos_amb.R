@@ -10,277 +10,267 @@ source("R/dic_tuss_db.R")
 
 bases <- c("DET", "CONS")
 
+estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "TO", "SP")
+
 urls <- purrr::map(
   bases,
-  ~ base(
-    ano = "2020",
-    estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
-    mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
-    base = .x,
-    url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/",
-    proc = "AMB"
-  )
-)
-
-# download e leitura de dados ---------------------------------------------
-
-memory.size(max = 10^12)
-
-future::plan(multisession) # habilitando multithread
-
-base_det <- furrr::future_map_dfr(
-  urls[[1]],
-  ~ unpack_read(
-    .x,
-    c(
-      "ID_EVENTO_ATENCAO_SAUDE",
-      "UF_PRESTADOR",
-      "CD_PROCEDIMENTO",
-      "CD_TABELA_REFERENCIA",
-      "QT_ITEM_EVENTO_INFORMADO",
-      "VL_ITEM_EVENTO_INFORMADO"
+  ~ purrr::map2(
+    .x, estados,
+    ~ base(
+      ano = "2020",
+      base = .x,
+      estado = .y,
+      mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
+      url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/",
+      proc = "AMB"
     )
   )
-) |>
-  janitor::clean_names()
+)
 
-base_det <- base_det[, collapse::na_omit(base_det)]
+# memory.size(max = 10^12)
 
-base_cons <- furrr::future_map_dfr(
-  urls[[2]],
-  ~ unpack_read(
-    .x,
-    c(
-      "ID_EVENTO_ATENCAO_SAUDE",
-      "FAIXA_ETARIA",
-      "SEXO",
-      "TEMPO_DE_PERMANENCIA",
-      "CD_CARATER_ATENDIMENTO"
+future::plan(multicore) # habilitando multithread
+
+# tratando procedimentos ambulatoriais um estado por vez ------------------
+
+amb <- function(urls, tabelas, index) {
+
+  ## download e leitura de dados ----
+
+  base_det <- furrr::future_map_dfr(
+    urls[[1]][[index]],
+    ~ unpack_read(
+      .x,
+      c(
+        "ID_EVENTO_ATENCAO_SAUDE",
+        "UF_PRESTADOR",
+        "CD_PROCEDIMENTO",
+        "CD_TABELA_REFERENCIA",
+        "QT_ITEM_EVENTO_INFORMADO",
+        "VL_ITEM_EVENTO_INFORMADO"
+      )
     )
+  ) |>
+    janitor::clean_names()
+
+  base_cons <- furrr::future_map_dfr(
+    urls[[2]][[index]],
+    ~ unpack_read(
+      .x,
+      c(
+        "ID_EVENTO_ATENCAO_SAUDE",
+        "FAIXA_ETARIA",
+        "SEXO"
+      )
+    )
+  ) |>
+    janitor::clean_names()
+
+  base_det <- base_det[, collapse::na_omit(base_det)]
+
+  base_cons <- base_cons[, collapse::na_omit(base_cons)]
+
+  base_amb <- data.table::merge.data.table(
+    base_det,
+    base_cons,
+    on = "id_evento_atencao_saude"
   )
-) |>
-  janitor::clean_names()
 
-base_cons <- base_cons[, collapse::na_omit(base_cons)]
+  base_amb <- base_amb[
+    cd_tabela_referencia != 0 &
+      cd_tabela_referencia != 9 &
+      cd_tabela_referencia != 98,
+    !"cd_tabela_referencia"
+  ]
 
-# join
+  ## join por dicionário ----
 
-base_amb <- data.table::merge.data.table(
-  base_det,
-  base_cons,
-  on = "id_evento_atencao_saude"
-)
+  base_amb[
+    ,
+    cd_procedimento := as.numeric(cd_procedimento)
+  ]
 
-base_amb <- base_amb[
-  cd_tabela_referencia != 0 &
-    cd_tabela_referencia != 9 &
-    cd_tabela_referencia != 98,
-  !"cd_tabela_referencia"
-]
-
-# join por dicionário -----------------------------------------------------
-
-base_amb[
-  ,
-  cd_procedimento := as.numeric(cd_procedimento)
-]
-
-base_amb <- data.table::merge.data.table(
-  base_amb,
-  tabelas,
-  by = "cd_procedimento",
-  allow.cartesian = TRUE
-)
-
-base_amb[
-  ,
-  ":="(termo = collapse::replace_NA(
-    termo,
-    "Sem informações"
-  ),
-  tabela = collapse::replace_NA(
-    tabela,
-    "Sem informações"
-  ))
-]
-
-# lista de procedimentos disponíveis --------------------------------------
-
-base_amb[
-  ,
-  collapse::funique(.SD, cols = "termo")
-][
-  ,
-  "termo"
-][
-  ,
-  termo := furrr::future_map_chr(
-    termo,
-    stringr::str_to_upper
+  base_amb <- data.table::merge.data.table(
+    base_amb,
+    tabelas,
+    by = "cd_procedimento",
+    allow.cartesian = TRUE
   )
-] |>
-  data.table::fwrite("output/termos_amb.csv")
 
-# estatísticas por estado -------------------------------------------------
+  base_amb[
+    ,
+    ":="(termo = collapse::replace_NA(
+      termo,
+      "Sem informações"
+    ),
+    tabela = collapse::replace_NA(
+      tabela,
+      "Sem informações"
+    ))
+  ]
 
-base_amb_uf <- base_amb[
-  ,
-  .(
-    tot_qt = collapse::fsum(qt_item_evento_informado),
-    tot_vl = collapse::fsum(vl_item_evento_informado)
-  ),
-  keyby = c("cd_procedimento", "termo", "uf_prestador")
-][
-  ,
-  mean_vl := tot_vl / tot_qt,
-  keyby = c("cd_procedimento", "termo", "uf_prestador")
-]
+  ## lista de procedimentos disponíveis ----
 
-data.table::fwrite(
-  base_amb_uf,
-  "output/base_amb_uf.csv"
-)
+  base_amb[
+    ,
+    collapse::funique(.SD, cols = "termo")
+  ][
+    ,
+    "termo"
+  ][
+    ,
+    termo := furrr::future_map_chr(
+      termo,
+      stringr::str_to_upper
+    )
+  ] |>
+    data.table::fwrite(
+      "output/termos_amb.csv",
+      append = TRUE)
 
-base_amb_uf <- base_amb[
-  ,
-  .(
-    tot_qt = collapse::fsum(qt_item_evento_informado),
-    tot_vl = collapse::fsum(vl_item_evento_informado)
-  ),
-  keyby = c("cd_procedimento", "termo", "uf_prestador")
-][
-  ,
-  mean_vl := round(tot_vl / tot_qt, 2),
-  keyby = c("cd_procedimento", "termo", "uf_prestador")
-][
-  ,
-  termo := furrr::future_map_chr(
-    termo,
-    stringr::str_to_upper
+  ## estatísticas por estado ----
+
+  base_amb_uf <- base_amb[
+    ,
+    .(
+      tot_qt = collapse::fsum(qt_item_evento_informado),
+      tot_vl = collapse::fsum(vl_item_evento_informado)
+    ),
+    keyby = c("cd_procedimento", "termo", "uf_prestador")
+  ][
+    ,
+    mean_vl := round(tot_vl / tot_qt, 2),
+    keyby = c("cd_procedimento", "termo", "uf_prestador")
+  ][
+    ,
+    termo := furrr::future_map_chr(
+      termo,
+      stringr::str_to_upper
+    )
+  ][
+    termo != "SEM INFORMAÇÕES"
+  ][
+    ,
+    future.apply::future_lapply(
+      .SD,
+      collapse::replace_NA,
+      value = 0
+    )
+  ]
+
+  data.table::setnames(
+    base_amb_uf,
+    old = "uf_prestador",
+    new = "categoria"
   )
-][
-  termo != "SEM INFORMAÇÕES"
-][
-  ,
-  .SD[.(uf_prestador = estados),
-    on = "uf_prestador"
-  ],
-  by = .(cd_procedimento, termo) # completando UF's faltantes
-][
-  ,
-  future.apply::future_lapply(
-    .SD,
-    collapse::replace_NA,
-    value = 0
+
+  data.table::fwrite(
+    base_amb_uf,
+    "output/base_amb_uf.csv",
+    append = TRUE
   )
-]
 
-data.table::setnames(
-  base_amb_uf,
-  old = "uf_prestador",
-  new = "categoria"
-)
+  ## estatísticas por faixa etária ----
 
-data.table::fwrite(
-  base_amb_uf,
-  "output/base_amb_uf.csv"
-)
+  base_amb_idade <- base_amb[
+    ,
+    .(
+      tot_qt = collapse::fsum(qt_item_evento_informado),
+      tot_vl = collapse::fsum(vl_item_evento_informado)
+    ),
+    keyby = c("cd_procedimento", "termo", "faixa_etaria")
+  ][
+    ,
+    mean_vl := round(tot_vl / tot_qt, 2),
+    keyby = c("cd_procedimento", "termo", "faixa_etaria")
+  ][
+    ,
+    termo := furrr::future_map_chr(
+      termo,
+      stringr::str_to_upper
+    )
+  ][
+    ,
+    faixa_etaria := tidyfast::dt_case_when(
+      faixa_etaria == "<1" ~ "< 1",
+      faixa_etaria == "80 ou mais" ~ "80 <",
+      TRUE ~ faixa_etaria
+    )
+  ][
+    ,
+    future.apply::future_lapply(
+      .SD,
+      collapse::replace_NA,
+      value = 0
+    )
+  ]
 
-# estatísticas por faixa etária -------------------------------------------
-
-faixas <- c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a 9", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I.")
-
-base_amb_idade <- base_amb[
-  ,
-  .(
-    tot_qt = collapse::fsum(qt_item_evento_informado),
-    tot_vl = collapse::fsum(vl_item_evento_informado)
-  ),
-  keyby = c("cd_procedimento", "termo", "faixa_etaria")
-][
-  ,
-  mean_vl := round(tot_vl / tot_qt, 2),
-  keyby = c("cd_procedimento", "termo", "faixa_etaria")
-][
-  ,
-  termo := furrr::future_map_chr(
-    termo,
-    stringr::str_to_upper
+  data.table::setnames(
+    base_amb_idade,
+    old = "faixa_etaria",
+    new = "categoria"
   )
-][
-  ,
-  faixa_etaria := tidyfast::dt_case_when(
-    faixa_etaria == "<1" ~ "< 1",
-    faixa_etaria == "80 ou mais" ~ "80 <",
-    TRUE ~ faixa_etaria
+
+  data.table::fwrite(
+    base_amb_idade,
+    "output/base_amb_idade.csv",
+    append = TRUE
   )
-][
-  ,
-  .SD[.(faixa_etaria = faixas),
-    on = "faixa_etaria"
-  ],
-  by = .(cd_procedimento, termo) # completando faixas etárias faltantes
-][
-  ,
-  future.apply::future_lapply(
-    .SD,
-    collapse::replace_NA,
-    value = 0
+
+  ## estatísticas por sexo ----
+
+  base_amb_sexo <- base_amb[
+    ,
+    .(
+      tot_qt = collapse::fsum(qt_item_evento_informado),
+      tot_vl = collapse::fsum(vl_item_evento_informado)
+    ),
+    keyby = c("cd_procedimento", "termo", "sexo")
+  ][
+    ,
+    mean_vl := round(tot_vl / tot_qt, 2),
+    keyby = c("cd_procedimento", "termo", "sexo")
+  ][
+    ,
+    sexo := tidyfast::dt_case_when(
+      sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
+      TRUE ~ sexo
+    )
+  ][
+    ,
+    future.apply::future_lapply(
+      .SD,
+      collapse::replace_NA,
+      value = 0
+    )
+  ]
+
+  data.table::setnames(
+    base_amb_sexo,
+    old = "sexo",
+    new = "categoria"
   )
-]
 
-data.table::setnames(
-  base_amb_idade,
-  old = "faixa_etaria",
-  new = "categoria"
-)
-
-data.table::fwrite(
-  base_amb_idade,
-  "output/base_amb_idade.csv"
-)
-
-# estatísticas por sexo ---------------------------------------------------
-
-base_amb_sexo <- base_amb[
-  ,
-  .(
-    tot_qt = collapse::fsum(qt_item_evento_informado),
-    tot_vl = collapse::fsum(vl_item_evento_informado)
-  ),
-  keyby = c("cd_procedimento", "termo", "sexo")
-][
-  ,
-  mean_vl := round(tot_vl / tot_qt, 2),
-  keyby = c("cd_procedimento", "termo", "sexo")
-][
-  ,
-  sexo := tidyfast::dt_case_when(
-    sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
-    TRUE ~ sexo
+  data.table::fwrite(
+    base_amb_sexo,
+    "output/base_amb_sexo.csv",
+    append = TRUE
   )
-][
-  ,
-  .SD[.(sexo = c("Masculino", "Feminino", "N. I.")),
-    on = "sexo"
-  ],
-  by = .(cd_procedimento, termo) # completando faixas etárias faltantes
-][
-  ,
-  future.apply::future_lapply(
-    .SD,
-    collapse::replace_NA,
-    value = 0
+}
+
+# exportando dados --------------------------------------------------------
+
+for (i in 1:27) {
+  furrr::future_walk(
+    i,
+    ~ amb(urls, tabelas, .x)
   )
-]
 
-data.table::setnames(
-  base_amb_sexo,
-  old = "sexo",
-  new = "categoria"
-)
+  gc()
+}
 
-data.table::fwrite(
-  base_amb_sexo,
-  "output/base_amb_sexo.csv"
-)
+# furrr::future_walk(
+#   index,
+#   ~ amb(urls, tabelas, .x)
+# )
+

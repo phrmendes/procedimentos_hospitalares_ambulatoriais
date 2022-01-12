@@ -12,6 +12,7 @@ pacman::p_load(
   future,
   future.apply,
   furrr,
+  pbapply,
   janitor,
   styler,
   fs,
