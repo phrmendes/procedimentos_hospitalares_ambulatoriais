@@ -1,4 +1,4 @@
-#### BASE CONSOLIDADA DE PROCEDIMENTOS ambITALARES POR UF ####
+#### BASE CONSOLIDADA DE PROCEDIMENTOS AMBULATORIAIS POR UF ####
 
 # bibliotecas e funções ---------------------------------------------------
 
@@ -271,8 +271,56 @@ for (i in 1:26) {
   gc()
 }
 
-# furrr::future_walk(
-#   index,
-#   ~ amb(urls, tabelas, .x)
-# )
+# limpando exportação -----------------------------------------------------
+
+fix_db <- function(path, factors) {
+  df <- readr::read_csv(path) |>
+    dplyr::distinct(cd_procedimento, termo, categoria) |>
+    data.table::as.data.table()
+
+  df <- df[
+    ,
+    .SD[.(categoria = factors),
+      on = "categoria"
+    ],
+    by = .(cd_procedimento, termo) # completando sexos faltantes
+  ][
+    ,
+    future.apply::future_lapply(
+      .SD,
+      collapse::replace_NA,
+      value = 0
+    )
+  ]
+
+  data.table::fwrite(
+    df,
+    path
+  )
+}
+
+files <- as.character(fs::dir_ls(path = "output/", regexp = "._amb_."))
+
+factors <- list(
+  idade = c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a 9", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I."),
+  sexo = c("Masculino", "Feminino", "N. I."),
+  uf = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+)
+
+parametros <- purrr::map2_dfr(
+  files, factors,
+  ~ tibble::tibble(
+    path = .x,
+    factors = list(.y)
+  )
+)
+
+purrr::walk(
+  1:3,
+  ~ fix_db(parametros$path[.x], parametros$factors[[.x]])
+)
+
+readr::read_csv("output/termos_amb.csv") |>
+  dplyr::distinct(termo) |>
+  readr::write_csv("output/termos_amb.csv")
 
