@@ -29,7 +29,7 @@ urls <- purrr::map(
 
 # memory.size(max = 10^12)
 
-future::plan(multicore) # habilitando multithread
+future::plan(multisession) # habilitando multithread
 
 # tratando procedimentos ambulatoriais um estado por vez ------------------
 
@@ -260,7 +260,9 @@ amb <- function(urls, tabelas, index) {
 
 # exportando dados --------------------------------------------------------
 
-for (i in 1:27) {
+# rodar loop de 5 em 5
+
+for (i in 1:26) {
   furrr::future_walk(
     i,
     ~ amb(urls, tabelas, .x)
