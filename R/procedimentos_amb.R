@@ -302,7 +302,7 @@ files <- as.character(fs::dir_ls(path = "output/", regexp = "._amb_."))
 factors <- list(
   idade = c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a 9", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I."),
   sexo = c("Masculino", "Feminino", "N. I."),
-  uf = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+  uf = estados
 )
 
 parametros <- purrr::map2_dfr(
