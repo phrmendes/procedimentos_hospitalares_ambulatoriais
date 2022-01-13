@@ -260,9 +260,7 @@ amb <- function(urls, tabelas, index) {
 
 # exportando dados --------------------------------------------------------
 
-# rodar loop de 5 em 5
-
-for (i in 1:26) {
+for (i in 1:27) {
   furrr::future_walk(
     i,
     ~ amb(urls, tabelas, .x)
