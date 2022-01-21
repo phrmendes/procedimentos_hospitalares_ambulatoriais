@@ -4,7 +4,6 @@
 
 source("R/bibliotecas.R")
 source("R/funcoes.R")
-source("R/dic_tuss_db.R")
 
 # definindo termos da buscas no dados abertos -----------------------------
 
