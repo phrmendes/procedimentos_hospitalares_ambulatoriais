@@ -2,3 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
+input/*.duckdb
+input/*.duckdb.wal

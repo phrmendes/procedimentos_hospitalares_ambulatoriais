@@ -2,8 +2,8 @@
 
 # bibliotecas e funções ---------------------------------------------------
 
-source("R/bibliotecas.R")
-source("R/funcoes.R")
+source("R/libraries.R")
+source("R/functions.R")
 
 # definindo termos da buscas no dados abertos -----------------------------
 
@@ -27,41 +27,57 @@ memory.size(max = 10^12)
 
 future::plan(multisession) # habilitando multithread
 
-base_det <- furrr::future_map_dfr(
+pbapply::pblapply(
   urls[[1]],
-  ~ unpack_read(
-    .x,
-    c(
-      "CD_PROCEDIMENTO",
-      "ID_EVENTO_ATENCAO_SAUDE",
-      "UF_PRESTADOR",
-      "CD_TABELA_REFERENCIA",
-      "QT_ITEM_EVENTO_INFORMADO",
-      "VL_ITEM_EVENTO_INFORMADO"
+  function (i) {
+    unpack_read(
+      url = i,
+      cols = c(
+        "CD_PROCEDIMENTO",
+        "ID_EVENTO_ATENCAO_SAUDE",
+        "UF_PRESTADOR",
+        "CD_TABELA_REFERENCIA",
+        "QT_ITEM_EVENTO_INFORMADO",
+        "VL_ITEM_EVENTO_INFORMADO"
+      ),
+      name = "base_det",
+      indexes = list(
+        "cd_procedimento",
+        "id_evento_atencao_saude",
+        "uf_prestador"
+      )
     )
-  )
-) |> # função de importação multithread
-  janitor::clean_names()
+  }
+)
 
-base_det <- base_det[, collapse::na_omit(base_det)]
-
-base_cons <- furrr::future_map_dfr(
+pbapply::pblapply(
   urls[[2]],
-  ~ unpack_read(
-    .x,
-    c(
-      "ID_EVENTO_ATENCAO_SAUDE",
-      "FAIXA_ETARIA",
-      "SEXO",
-      "CD_CARATER_ATENDIMENTO"
+  function (i) {
+    unpack_read(
+      url = i,
+      cols = c(
+        "ID_EVENTO_ATENCAO_SAUDE",
+        "FAIXA_ETARIA",
+        "SEXO",
+        "CD_CARATER_ATENDIMENTO"
+      ),
+      name = "base_cons",
+      indexes = list(
+        "id_evento_atencao_saude",
+        "sexo",
+        "faixa_etaria",
+      )
     )
-  )
-) |> # função de importação multithread
-  janitor::clean_names()
-
-base_cons <- base_cons[, collapse::na_omit(base_cons)]
+  }
+)
 
 # join
+
+con <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "input/proc_hosp_amb.duckdb")
+
+duckdb::dbDisconnect(con, shutdown = TRUE)
 
 base_hosp <- data.table::merge.data.table(
   base_det,

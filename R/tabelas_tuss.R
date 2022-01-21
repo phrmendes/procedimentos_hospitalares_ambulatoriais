@@ -2,8 +2,8 @@
 
 # funções e bibliotecas ---------------------------------------------------
 
-source("R/bibliotecas.R")
-source("R/funcoes.R")
+source("R/libraries.R")
+source("R/functions.R")
 
 # importação e limpeza de dicionários -------------------------------------
 
@@ -37,7 +37,7 @@ tabelas <- bind(
 
 con <- DBI::dbConnect(
   duckdb::duckdb(),
-  dbdir = "proc_hosp_amb.duckdb")
+  dbdir = "input/proc_hosp_amb.duckdb")
 
 dplyr::copy_to(
   dest = con,

@@ -30,7 +30,8 @@ base <- function(ano, estado, mes, base, url, proc) {
 
 # função de descompactação e leitura de arquivos do ftp
 
-unpack_read <- function(url, cols) {
+unpack_read <- function(url, cols, name, indexes) {
+
   temp <- tempfile()
 
   tempdir <- tempdir()
@@ -53,6 +54,23 @@ unpack_read <- function(url, cols) {
     select = cols,
     sep = ";",
     dec = ","
+  ) |>
+    janitor::clean_names()
+
+  x <- x[, collapse::na_omit(x)]
+
+  con <- duckdb::dbConnect(
+    duckdb::duckdb(),
+    dbdir = "input/proc_hosp_amb.duckdb")
+
+  duckdb::dbWriteTable(
+    conn = con,
+    value = x,
+    name = glue::glue("{name}"),
+    overwrite = FALSE,
+    temporary = FALSE,
+    append = TRUE,
+    indexes = indexes
   )
 
   purrr::walk(
@@ -60,9 +78,8 @@ unpack_read <- function(url, cols) {
     ~ fs::file_delete(glue::glue("{.x}"))
   )
 
-  gc()
+  duckdb::dbDisconnect(con, shutdown = TRUE)
 
-  return(x)
 }
 
 # função que cria dummies que indicam as tabelas base
