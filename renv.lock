@@ -328,6 +328,13 @@
       "Repository": "CRAN",
       "Hash": "1e14e4c5b2814de5225312394bc316da"
     },
+    "duckdb": {
+      "Package": "duckdb",
+      "Version": "0.3.1-1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "209719c79ec850e02212a54c23995b9d"
+    },
     "e1071": {
       "Package": "e1071",
       "Version": "1.7-9",
@@ -754,6 +761,13 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "5300c9fc71841550bdca64d39e82af0e"
+    },
+    "pbapply": {
+      "Package": "pbapply",
+      "Version": "1.5-0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "11359a5bb73622ab3f4136bf57108b64"
     },
     "pillar": {
       "Package": "pillar",

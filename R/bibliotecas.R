@@ -28,5 +28,8 @@ pacman::p_load(
   sf,
   MetBrewer,
   memoise,
+  duckdb,
+  DBI,
+  dbplyr,
   install = F
 )
