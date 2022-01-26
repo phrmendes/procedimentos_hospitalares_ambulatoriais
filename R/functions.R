@@ -30,8 +30,7 @@ base <- function(ano, estado, mes, base, url, proc) {
 
 # função de descompactação e leitura de arquivos do ftp
 
-unpack_read <- function(url, cols, name, indexes) {
-
+unpack_write_db <- function(url, cols, name, indexes) {
   temp <- tempfile()
 
   tempdir <- tempdir()
@@ -51,17 +50,32 @@ unpack_read <- function(url, cols, name, indexes) {
   x <- data.table::fread(
     input = csv_file,
     encoding = "UTF-8",
-    select = cols,
+    select = stringr::str_to_upper(cols),
     sep = ";",
     dec = ","
   ) |>
     janitor::clean_names()
 
-  x <- x[, collapse::na_omit(x)]
+  x <- x[
+    ,
+    collapse::na_omit(x)
+  ][
+    ,
+    id_evento_atencao_saude := as.character(id_evento_atencao_saude)
+  ]
+
+  if (c("cd_tabela_referencia") %in% names(x) == TRUE) {
+    x <- x[
+      !(cd_tabela_referencia %in% c(0, 9, 98))
+    ][
+      cd_procedimento != "TABELA PRÓPRIA"
+    ]
+  }
 
   con <- duckdb::dbConnect(
     duckdb::duckdb(),
-    dbdir = "input/proc_hosp_amb.duckdb")
+    dbdir = "input/proc_hosp_amb.duckdb"
+  )
 
   duckdb::dbWriteTable(
     conn = con,
@@ -78,8 +92,7 @@ unpack_read <- function(url, cols, name, indexes) {
     ~ fs::file_delete(glue::glue("{.x}"))
   )
 
-  duckdb::dbDisconnect(con, shutdown = TRUE)
-
+  DBI::dbDisconnect(con, shutdown = TRUE)
 }
 
 # função que cria dummies que indicam as tabelas base

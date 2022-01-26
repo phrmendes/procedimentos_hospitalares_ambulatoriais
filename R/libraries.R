@@ -21,7 +21,6 @@ pacman::p_load(
   plotly,
   here,
   ggthemes,
-  forcats,
   dashboardthemes,
   shinydashboardPlus,
   geobr,
@@ -30,6 +29,6 @@ pacman::p_load(
   memoise,
   duckdb,
   DBI,
-  dbplyr,
+  miniUI,
   install = F
 )
