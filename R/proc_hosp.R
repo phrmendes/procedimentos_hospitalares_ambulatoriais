@@ -4,6 +4,7 @@
 
 source("R/libraries.R")
 source("R/functions.R")
+# source("R/tabelas_tuss.R")
 
 # definindo termos da buscas no dados abertos -----------------------------
 
@@ -21,24 +22,22 @@ urls <- purrr::map(
   )
 )
 
-# download e leitura de dados ---------------------------------------------
+# criação da database ------------------------------------------------
 
-memory.size(max = 10^12)
-
-future::plan(multisession) # habilitando multithread
+## download e escrita em database ----
 
 pbapply::pblapply(
   urls[[1]],
-  function (i) {
-    unpack_read(
+  function(i) {
+    unpack_write_db(
       url = i,
       cols = c(
-        "CD_PROCEDIMENTO",
-        "ID_EVENTO_ATENCAO_SAUDE",
-        "UF_PRESTADOR",
-        "CD_TABELA_REFERENCIA",
-        "QT_ITEM_EVENTO_INFORMADO",
-        "VL_ITEM_EVENTO_INFORMADO"
+        "cd_procedimento",
+        "id_evento_atencao_saude",
+        "uf_prestador",
+        "cd_tabela_referencia",
+        "qt_item_evento_informado",
+        "vl_item_evento_informado"
       ),
       name = "base_det",
       indexes = list(
@@ -52,14 +51,14 @@ pbapply::pblapply(
 
 pbapply::pblapply(
   urls[[2]],
-  function (i) {
-    unpack_read(
+  function(i) {
+    unpack_write_db(
       url = i,
       cols = c(
-        "ID_EVENTO_ATENCAO_SAUDE",
-        "FAIXA_ETARIA",
-        "SEXO",
-        "CD_CARATER_ATENDIMENTO"
+        "id_evento_atencao_saude",
+        "faixa_etaria",
+        "sexo",
+        "cd_carater_atendimento"
       ),
       name = "base_cons",
       indexes = list(
@@ -71,72 +70,124 @@ pbapply::pblapply(
   }
 )
 
-# join
+## join ----
+
+# usar linux para realizar o join
 
 con <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "input/proc_hosp_amb.duckdb")
-
-duckdb::dbDisconnect(con, shutdown = TRUE)
-
-base_hosp <- data.table::merge.data.table(
-  base_det,
-  base_cons,
-  on = "id_evento_atencao_saude"
+  dbdir = "input/proc_hosp_amb.duckdb"
 )
 
-base_hosp <- base_hosp[
-  cd_tabela_referencia != 0 &
-    cd_tabela_referencia != 9 &
-    cd_tabela_referencia != 98,
-  !"cd_tabela_referencia"
-]
-
-# join por dicionário -----------------------------------------------------
-
-base_hosp[
-  ,
-  cd_procedimento := as.numeric(cd_procedimento)
-]
-
-base_hosp <- data.table::merge.data.table(
-  base_hosp,
-  tabelas,
-  by = "cd_procedimento",
-  all.x = T,
-  allow.cartesian = TRUE
+subquery <- glue::glue_sql(
+  "SELECT *
+  FROM base_cons AS cons
+  JOIN base_det AS det
+  ON cons.id_evento_atencao_saude = det.id_evento_atencao_saude",
+  .con = con
 )
 
-base_hosp[
-  ,
-  ":="(termo = collapse::replace_NA(
-    termo,
-    "Sem informações"
-  ),
-  tabela = collapse::replace_NA(
-    tabela,
-    "Sem informações"
-  ))
-]
+join <- glue::glue_sql(
+  "SELECT *
+  FROM ({subquery}) AS a
+  LEFT JOIN tabelas_tuss AS b
+  ON a.cd_procedimento = b.cd_procedimento",
+  .con = con
+)
 
-# lista de procedimentos disponíveis --------------------------------------
+create_table <- glue::glue_sql(
+  "CREATE TABLE proc
+  AS ({join})",
+  .con = con
+)
 
-base_hosp[
-  ,
-  collapse::funique(.SD, cols = "termo")
-][
-  ,
-  "termo"
-][
-  ,
-  termo := furrr::future_map_chr(
-    termo,
-    stringr::str_to_upper
+## limpando e exportando database ----
+
+purrr::walk(
+  c("base_cons", "base_det", "tabelas_tuss"),
+  ~ duckdb::dbRemoveTable(con, .x)
+)
+
+purrr::walk(
+  c("cd_procedimento:1", "id_evento_atencao_saude:1"),
+  ~ DBI::dbExecute(
+    conn = con,
+    statement = glue::glue(
+      'ALTER TABLE proc
+      DROP COLUMN IF EXISTS "{paste0(.x)}"'
+    )
   )
-] |>
-  data.table::fwrite("output/termos_hosp.csv")
+)
 
-# estatísticas por estado -------------------------------------------------
+DBI::dbExecute(
+  conn = con,
+  statement = "EXPORT DATABASE 'input/db' (FORMAT CSV)"
+)
+
+DBI::dbDisconnect(con, shutdown = TRUE)
+
+fs::file_delete("input/proc_hosp_amb.duckdb")
+
+## criando nova database limpa ----
+
+con <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "input/proc_hosp_amb.duckdb"
+)
+
+DBI::dbExecute(
+  conn = con,
+  statement = "IMPORT DATABASE 'input/db'")
+
+indexes <- glue::glue_sql(
+  "CREATE INDEX idx
+  ON proc (id_evento_atencao_saude, cd_procedimento, faixa_etaria, sexo, uf_prestador)",
+  .con = con
+)
+
+DBI::dbExecute(conn = con, statement = indexes)
+
+fs::file_delete("input/db")
+
+# DBI::dbDisconnect(con, shutdown = TRUE)
+
+# database do shinyapp ----------------------------------------------------
+
+shinydb <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "output/shinydb.duckdb"
+)
+
+df <- dplyr::tbl(con, "proc")
+
+## lista de procedimentos disponíveis ----
+
+termos_hosp <- df |>
+  dplyr::select(termo) |>
+  dplyr::collect() |>
+  dplyr::distinct() |>
+  dplyr::mutate(
+    termo = purrr::map_chr(
+      termo,
+      stringr::str_to_upper
+    )
+  )
+
+dplyr::copy_to(
+  dest = shinydb,
+  df = termos_hosp,
+  name = "termos_hosp",
+  indexes = "termo"
+)
+
+## estatísticas por estado ----
+
+df |>
+  dplyr::group_by(cd_procedimento, termo, uf_prestador) |>
+  dplyr::mutate(
+    tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
+    tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
+  )
 
 base_hosp_uf <- base_hosp[
   ,

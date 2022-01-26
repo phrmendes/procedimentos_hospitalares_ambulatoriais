@@ -31,11 +31,13 @@ tabelas <- bind(
   tabelas$tabela_20,
   tabelas$tabela_22,
   tabelas$tabela_63
-)
+) |>
+  dplyr::rename(cd_procedimento = codigo_do_termo) |>
+  dplyr::mutate(cd_procedimento = as.character(as.integer(cd_procedimento)))
 
 # criando duckdb
 
-con <- DBI::dbConnect(
+con <- duckdb::dbConnect(
   duckdb::duckdb(),
   dbdir = "input/proc_hosp_amb.duckdb")
 
@@ -44,7 +46,7 @@ dplyr::copy_to(
   df = tabelas,
   name = "tabelas_tuss",
   indexes = list(
-    "codigo_do_termo",
+    "cd_procedimento",
     "termo"
   ),
   temporary = FALSE,
