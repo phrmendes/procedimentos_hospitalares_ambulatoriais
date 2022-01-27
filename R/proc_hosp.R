@@ -10,11 +10,13 @@ source("R/functions.R")
 
 bases <- c("DET", "CONS")
 
+estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+
 urls <- purrr::map(
   bases,
   ~ base(
     ano = "2020",
-    estado = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
+    estado = estados,
     mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
     base = .x,
     url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
@@ -25,6 +27,8 @@ urls <- purrr::map(
 # criação da database ------------------------------------------------
 
 ## download e escrita em database ----
+
+future::plan(multisession) # habilitando multithread
 
 pbapply::pblapply(
   urls[[1]],
@@ -101,6 +105,8 @@ create_table <- glue::glue_sql(
   .con = con
 )
 
+DBI::dbExecute(conn = con, statement = create_table)
+
 ## limpando e exportando database ----
 
 purrr::walk(
@@ -121,7 +127,7 @@ purrr::walk(
 
 DBI::dbExecute(
   conn = con,
-  statement = "EXPORT DATABASE 'input/db' (FORMAT CSV)"
+  statement = "COPY proc TO 'input/proc.csv'"
 )
 
 DBI::dbDisconnect(con, shutdown = TRUE)
@@ -137,19 +143,21 @@ con <- duckdb::dbConnect(
 
 DBI::dbExecute(
   conn = con,
-  statement = "IMPORT DATABASE 'input/db'")
+  statement = "CREATE SCHEMA pg_catalog")
 
-indexes <- glue::glue_sql(
-  "CREATE INDEX idx
-  ON proc (id_evento_atencao_saude, cd_procedimento, faixa_etaria, sexo, uf_prestador)",
-  .con = con
-)
+DBI::dbExecute(
+  conn = con,
+  statement = "CREATE TABLE proc(id_evento_atencao_saude VARCHAR, faixa_etaria VARCHAR, sexo VARCHAR, cd_carater_atendimento INTEGER, cd_procedimento VARCHAR, uf_prestador VARCHAR, cd_tabela_referencia INTEGER, qt_item_evento_informado INTEGER, vl_item_evento_informado DOUBLE, termo VARCHAR, tabela VARCHAR)")
 
-DBI::dbExecute(conn = con, statement = indexes)
+DBI::dbExecute(
+  conn = con,
+  statement = "COPY proc FROM 'input/proc.csv' (HEADER 0)")
 
-fs::file_delete("input/db")
+DBI::dbExecute(
+  conn = con,
+  statement = "CREATE INDEX idx ON proc (id_evento_atencao_saude, cd_procedimento, faixa_etaria, sexo, uf_prestador)")
 
-# DBI::dbDisconnect(con, shutdown = TRUE)
+fs::file_delete("input/proc.csv")
 
 # database do shinyapp ----------------------------------------------------
 
@@ -164,50 +172,47 @@ df <- dplyr::tbl(con, "proc")
 
 termos_hosp <- df |>
   dplyr::select(termo) |>
-  dplyr::collect() |>
   dplyr::distinct() |>
-  dplyr::mutate(
-    termo = purrr::map_chr(
-      termo,
-      stringr::str_to_upper
-    )
-  )
+  dplyr::collect() |>
+  data.table::as.data.table()
 
-dplyr::copy_to(
-  dest = shinydb,
-  df = termos_hosp,
-  name = "termos_hosp",
-  indexes = "termo"
-)
-
-## estatísticas por estado ----
-
-df |>
-  dplyr::group_by(cd_procedimento, termo, uf_prestador) |>
-  dplyr::mutate(
-    tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
-    tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
-  )
-
-base_hosp_uf <- base_hosp[
-  ,
-  .(
-    tot_qt = collapse::fsum(qt_item_evento_informado),
-    tot_vl = collapse::fsum(vl_item_evento_informado)
-  ),
-  keyby = c("cd_procedimento", "termo", "uf_prestador")
-][
-  ,
-  mean_vl := round(tot_vl / tot_qt, 2),
-  keyby = c("cd_procedimento", "termo", "uf_prestador")
-][
+termos_hosp[
   ,
   termo := furrr::future_map_chr(
     termo,
     stringr::str_to_upper
   )
-][
-  termo != "SEM INFORMAÇÕES"
+]
+
+dplyr::copy_to(
+  dest = shinydb,
+  df = termos_hosp,
+  name = "termos_hosp",
+  indexes = "termo",
+  overwrite = TRUE
+)
+
+## estatísticas por estado ----
+
+base_hosp_uf <- df |>
+  dplyr::group_by(cd_procedimento, termo, uf_prestador) |>
+  dplyr::summarise(
+    tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
+    tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
+  ) |>
+  dplyr::ungroup() |>
+  dplyr::mutate(
+    mean_vl = round(tot_vl / tot_qt, 2)
+  ) |>
+  dplyr::collect() |>
+  data.table::as.data.table()
+
+base_hosp_uf <- base_hosp_uf[
+  termo != "SEM INFORMAÇÕES",
+  termo := furrr::future_map_chr(
+    termo,
+    stringr::str_to_upper
+  )
 ][
   ,
   .SD[.(uf_prestador = estados),
@@ -216,7 +221,7 @@ base_hosp_uf <- base_hosp[
   by = .(cd_procedimento, termo) # completando UF's faltantes
 ][
   ,
-  future.apply::future_lapply(
+  furrr::future_map(
     .SD,
     collapse::replace_NA,
     value = 0
@@ -229,9 +234,12 @@ data.table::setnames(
   new = "categoria"
 )
 
-data.table::fwrite(
-  base_hosp_uf,
-  "output/base_hosp_uf.csv"
+dplyr::copy_to(
+  dest = shinydb,
+  df = base_hosp_uf,
+  name = "base_hosp_uf",
+  indexes = "termo",
+  overwrite = TRUE
 )
 
 # estatísticas por faixa etária -------------------------------------------
