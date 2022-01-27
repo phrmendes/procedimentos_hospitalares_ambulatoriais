@@ -4,13 +4,13 @@
 
 source("R/libraries.R")
 source("R/functions.R")
-# source("R/tabelas_tuss.R")
+source("R/tabelas_tuss.R")
 
 # definindo termos da buscas no dados abertos -----------------------------
 
-bases <- c("DET", "CONS")
-
 estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+
+bases <- c("DET", "CONS")
 
 urls <- purrr::map(
   bases,
@@ -80,7 +80,7 @@ pbapply::pblapply(
 
 con <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "input/proc_hosp_amb.duckdb"
+  dbdir = "input/proc.duckdb"
 )
 
 subquery <- glue::glue_sql(
@@ -130,9 +130,9 @@ DBI::dbExecute(
   statement = "COPY proc TO 'input/proc.csv'"
 )
 
-DBI::dbDisconnect(con, shutdown = TRUE)
+duckdb::dbDisconnect(con, shutdown = TRUE)
 
-fs::file_delete("input/proc_hosp_amb.duckdb")
+fs::file_delete("input/proc.duckdb")
 
 ## criando nova database limpa ----
 
@@ -147,7 +147,7 @@ DBI::dbExecute(
 
 DBI::dbExecute(
   conn = con,
-  statement = "CREATE TABLE proc(id_evento_atencao_saude VARCHAR, faixa_etaria VARCHAR, sexo VARCHAR, cd_carater_atendimento INTEGER, cd_procedimento VARCHAR, uf_prestador VARCHAR, cd_tabela_referencia INTEGER, qt_item_evento_informado INTEGER, vl_item_evento_informado DOUBLE, termo VARCHAR, tabela VARCHAR)")
+  statement = "CREATE TABLE proc_hosp(id_evento_atencao_saude VARCHAR, faixa_etaria VARCHAR, sexo VARCHAR, cd_carater_atendimento INTEGER, cd_procedimento VARCHAR, uf_prestador VARCHAR, cd_tabela_referencia INTEGER, qt_item_evento_informado INTEGER, vl_item_evento_informado DOUBLE, termo VARCHAR, tabela VARCHAR)")
 
 DBI::dbExecute(
   conn = con,
@@ -155,22 +155,22 @@ DBI::dbExecute(
 
 DBI::dbExecute(
   conn = con,
-  statement = "CREATE INDEX idx ON proc (id_evento_atencao_saude, cd_procedimento, faixa_etaria, sexo, uf_prestador)")
+  statement = "CREATE INDEX idx ON proc_hosp (id_evento_atencao_saude, cd_procedimento, faixa_etaria, sexo, uf_prestador)")
 
 fs::file_delete("input/proc.csv")
 
+gc()
+
 # database do shinyapp ----------------------------------------------------
+
+## lista de procedimentos disponíveis
 
 shinydb <- duckdb::dbConnect(
   duckdb::duckdb(),
   dbdir = "output/shinydb.duckdb"
 )
 
-df <- dplyr::tbl(con, "proc")
-
-## lista de procedimentos disponíveis ----
-
-termos_hosp <- df |>
+termos_hosp <- tbl(con, "proc_hosp") |>
   dplyr::select(termo) |>
   dplyr::distinct() |>
   dplyr::collect() |>
@@ -184,159 +184,54 @@ termos_hosp[
   )
 ]
 
-dplyr::copy_to(
-  dest = shinydb,
-  df = termos_hosp,
+duckdb::dbWriteTable(
+  conn = shinydb,
+  value = termos_hosp,
   name = "termos_hosp",
-  indexes = "termo",
-  overwrite = TRUE
+  overwrite = TRUE,
+  temporary = FALSE
 )
 
-## estatísticas por estado ----
-
-base_hosp_uf <- df |>
-  dplyr::group_by(cd_procedimento, termo, uf_prestador) |>
-  dplyr::summarise(
-    tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
-    tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
-  ) |>
-  dplyr::ungroup() |>
-  dplyr::mutate(
-    mean_vl = round(tot_vl / tot_qt, 2)
-  ) |>
-  dplyr::collect() |>
-  data.table::as.data.table()
-
-base_hosp_uf <- base_hosp_uf[
-  termo != "SEM INFORMAÇÕES",
-  termo := furrr::future_map_chr(
-    termo,
-    stringr::str_to_upper
-  )
-][
-  ,
-  .SD[.(uf_prestador = estados),
-    on = "uf_prestador"
-  ],
-  by = .(cd_procedimento, termo) # completando UF's faltantes
-][
-  ,
-  furrr::future_map(
-    .SD,
-    collapse::replace_NA,
-    value = 0
-  )
-]
-
-data.table::setnames(
-  base_hosp_uf,
-  old = "uf_prestador",
-  new = "categoria"
+purrr::walk(
+  c(con, shinydb),
+  ~ duckdb::dbDisconnect(.x, shutdown = TRUE)
 )
 
-dplyr::copy_to(
-  dest = shinydb,
-  df = base_hosp_uf,
-  name = "base_hosp_uf",
-  indexes = "termo",
-  overwrite = TRUE
+## shapefile de estados
+
+geobr::read_state(
+  code_state = "all",
+  showProgress = FALSE
+) |>
+  dplyr::select(code_state, abbrev_state, geom) |>
+  dplyr::rename(categoria = abbrev_state) |>
+  saveRDS(file = "output/geom_ufs.rds")
+
+## estatísticas por estado
+
+import_shinydb(
+  x = "uf_prestador",
+  complete_vars = estados,
+  db_name = "base_hosp_uf",
+  table = "proc_hosp"
 )
 
-# estatísticas por faixa etária -------------------------------------------
+## estatísticas por faixa etária
 
 faixas <- c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a 9", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I.")
 
-base_hosp_idade <- base_hosp[
-  ,
-  .(
-    tot_qt = collapse::fsum(qt_item_evento_informado),
-    tot_vl = collapse::fsum(vl_item_evento_informado)
-  ),
-  keyby = c("cd_procedimento", "termo", "faixa_etaria")
-][
-  ,
-  mean_vl := round(tot_vl / tot_qt, 2),
-  keyby = c("cd_procedimento", "termo", "faixa_etaria")
-][
-  ,
-  termo := furrr::future_map_chr(
-    termo,
-    stringr::str_to_upper
-  )
-][
-  ,
-  faixa_etaria := tidyfast::dt_case_when(
-    faixa_etaria == "<1" ~ "< 1",
-    faixa_etaria == "80 ou mais" ~ "80 <",
-    TRUE ~ faixa_etaria
-  )
-][
-  ,
-  .SD[.(faixa_etaria = faixas),
-    on = "faixa_etaria"
-  ],
-  by = .(cd_procedimento, termo) # completando faixas etárias faltantes
-][
-  ,
-  future.apply::future_lapply(
-    .SD,
-    collapse::replace_NA,
-    value = 0
-  )
-]
-
-data.table::setnames(
-  base_hosp_idade,
-  old = "faixa_etaria",
-  new = "categoria"
+import_shinydb(
+  x = "faixa_etaria",
+  complete_vars = faixas,
+  db_name = "base_hosp_idade",
+  table = "proc_hosp"
 )
 
-data.table::fwrite(
-  base_hosp_idade,
-  "output/base_hosp_idade.csv"
-)
+## estatísticas por sexo
 
-# estatísticas por sexo ---------------------------------------------------
-
-base_hosp_sexo <- base_hosp[
-  ,
-  .(
-    tot_qt = collapse::fsum(qt_item_evento_informado),
-    tot_vl = collapse::fsum(vl_item_evento_informado)
-  ),
-  keyby = c("cd_procedimento", "termo", "sexo")
-][
-  ,
-  mean_vl := round(tot_vl / tot_qt, 2),
-  keyby = c("cd_procedimento", "termo", "sexo")
-][
-  ,
-  sexo := tidyfast::dt_case_when(
-    sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
-    TRUE ~ sexo
-  )
-][
-  ,
-  .SD[.(sexo = c("Masculino", "Feminino", "N. I.")),
-    on = "sexo"
-  ],
-  by = .(cd_procedimento, termo) # completando sexos faltantes
-][
-  ,
-  future.apply::future_lapply(
-    .SD,
-    collapse::replace_NA,
-    value = 0
-  )
-]
-
-data.table::setnames(
-  base_hosp_sexo,
-  old = "sexo",
-  new = "categoria"
-)
-
-data.table::fwrite(
-  base_hosp_sexo,
-  "output/base_hosp_sexo.csv"
+import_shinydb(
+  x = "sexo",
+  complete_vars = c("Masculino", "Feminino", "N. I."),
+  db_name = "base_hosp_sexo",
+  table = "proc_hosp"
 )

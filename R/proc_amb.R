@@ -2,9 +2,9 @@
 
 # bibliotecas e funções ---------------------------------------------------
 
-source("R/bibliotecas.R")
-source("R/funcoes.R")
-source("R/dic_tuss_db.R")
+source("R/libraries.R")
+source("R/functions.R")
+source("R/tabelas_tuss.R")
 
 # definindo termos da buscas no dados abertos -----------------------------
 
@@ -14,22 +14,65 @@ estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "
 
 urls <- purrr::map(
   bases,
-  ~ purrr::map2(
-    .x, estados,
-    ~ base(
-      ano = "2020",
-      base = .x,
-      estado = .y,
-      mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
-      url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/",
-      proc = "AMB"
-    )
+  ~ base(
+    ano = "2020",
+    estado = estados,
+    mes = c("01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"),
+    base = .x,
+    url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
+    proc = "AMB"
   )
 )
 
-# memory.size(max = 10^12)
+# criação da database ------------------------------------------------
+
+## download e escrita em database ----
 
 future::plan(multisession) # habilitando multithread
+
+pbapply::pblapply(
+  urls[[1]],
+  function(i) {
+    unpack_write_db(
+      url = i,
+      cols = c(
+        "cd_procedimento",
+        "id_evento_atencao_saude",
+        "uf_prestador",
+        "cd_tabela_referencia",
+        "qt_item_evento_informado",
+        "vl_item_evento_informado"
+      ),
+      name = "base_det",
+      indexes = list(
+        "cd_procedimento",
+        "id_evento_atencao_saude",
+        "uf_prestador"
+      )
+    )
+  }
+)
+
+pbapply::pblapply(
+  urls[[2]],
+  function(i) {
+    unpack_write_db(
+      url = i,
+      cols = c(
+        "id_evento_atencao_saude",
+        "faixa_etaria",
+        "sexo",
+        "cd_carater_atendimento"
+      ),
+      name = "base_cons",
+      indexes = list(
+        "id_evento_atencao_saude",
+        "sexo",
+        "faixa_etaria",
+      )
+    )
+  }
+)
 
 # tratando procedimentos ambulatoriais um estado por vez ------------------
 

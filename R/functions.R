@@ -74,7 +74,7 @@ unpack_write_db <- function(url, cols, name, indexes) {
 
   con <- duckdb::dbConnect(
     duckdb::duckdb(),
-    dbdir = "input/proc_hosp_amb.duckdb"
+    dbdir = "input/proc.duckdb"
   )
 
   duckdb::dbWriteTable(
@@ -92,7 +92,7 @@ unpack_write_db <- function(url, cols, name, indexes) {
     ~ fs::file_delete(glue::glue("{.x}"))
   )
 
-  DBI::dbDisconnect(con, shutdown = TRUE)
+  duckdb::dbDisconnect(con, shutdown = TRUE)
 }
 
 # função que cria dummies que indicam as tabelas base
@@ -121,3 +121,116 @@ load_data <- function(x) {
 # not in
 
 `%not_in%` <- Negate(`%in%`)
+
+# função de tratamento de dados da database
+
+import_shinydb <- function(x, complete_vars, db_name, table) {
+  con <- duckdb::dbConnect(
+    duckdb::duckdb(),
+    dbdir = "input/proc_hosp_amb.duckdb"
+  )
+
+  shinydb <- duckdb::dbConnect(
+    duckdb::duckdb(),
+    dbdir = "output/shinydb.duckdb"
+  )
+
+  df <- dplyr::tbl(con, paste0(table))
+
+  group_by_var <- as.symbol(glue::glue("{x}"))
+
+  y <- df |>
+    dplyr::group_by(cd_procedimento, termo, group_by_var) |>
+    dplyr::summarise(
+      tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
+      tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      mean_vl = round(tot_vl / tot_qt, 2)
+    ) |>
+    dplyr::collect() |>
+    data.table::as.data.table()
+
+  y <- y[
+    termo != "SEM INFORMAÇÕES",
+    termo := furrr::future_map_chr(
+      termo,
+      stringr::str_to_upper
+    )
+  ]
+
+  if (x == "uf_prestador") {
+    y <- y[
+      ,
+      .SD[
+        .(uf_prestador = complete_vars),
+        on = x
+      ],
+      by = .(cd_procedimento, termo) # completando UF's faltantes
+    ]
+  } else if (x == "faixa_etaria") {
+    y <- y[
+      ,
+      faixa_etaria := tidyfast::dt_case_when(
+        faixa_etaria == "<1" ~ "< 1",
+        faixa_etaria == "80 ou mais" ~ "80 <",
+        TRUE ~ faixa_etaria
+      )
+    ][
+      ,
+      .SD[
+        .(faixa_etaria = complete_vars),
+        on = x
+      ],
+      by = .(cd_procedimento, termo) # completando UF's faltantes
+    ]
+  } else {
+    y <- y[
+      ,
+      sexo := tidyfast::dt_case_when(
+        sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
+        TRUE ~ sexo
+      )
+    ][
+      ,
+      .SD[
+        .(sexo = complete_vars),
+        on = x
+      ],
+      by = .(cd_procedimento, termo) # completando UF's faltantes
+    ]
+  }
+
+  y <- y[
+    ,
+    furrr::future_map(
+      .SD,
+      collapse::replace_NA,
+      value = 0
+    )
+  ][
+    termo != "0"
+  ]
+
+  data.table::setnames(
+    y,
+    old = paste0(x),
+    new = "categoria"
+  )
+
+  duckdb::dbWriteTable(
+    conn = shinydb,
+    value = y,
+    name = db_name,
+    overwrite = TRUE,
+    temporary = FALSE
+  )
+
+  purrr::walk(
+    c(con, shinydb),
+    ~ duckdb::dbDisconnect(.x, shutdown = TRUE)
+  )
+
+  return("Importado!")
+}

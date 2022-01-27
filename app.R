@@ -212,15 +212,6 @@ server <- function(input, output, session) {
   output$db_map <- plotly::renderPlotly({
     dados <- hosp_db$UF
 
-    # download de shapefiles de estados
-    # geobr::read_state(
-    #   code_state = "all",
-    #   showProgress = FALSE
-    # ) |>
-    #   dplyr::select(code_state, abbrev_state, geom) |>
-    #   dplyr::rename(categoria = abbrev_state) |>
-    #   saveRDS(file = "output/geom_ufs.rds")
-
     ufs <- readRDS(here::here("output/geom_ufs.rds"))
 
     plot_map <- dados |>
