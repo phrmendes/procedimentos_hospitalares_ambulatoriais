@@ -1,9 +1,11 @@
-#### criação de base de dados de dicionário ####
+###########################################
+#### CRIAÇÃO DE DATABASE DE DICIONÁRIO ####
+###########################################
 
 # funções e bibliotecas ---------------------------------------------------
 
-source("R/libraries.R")
-source("R/functions.R")
+source("R/1_libraries.R")
+source("R/2_functions.R")
 
 # importação e limpeza de dicionários -------------------------------------
 
@@ -35,11 +37,11 @@ tabelas <- bind(
   dplyr::rename(cd_procedimento = codigo_do_termo) |>
   dplyr::mutate(cd_procedimento = as.character(as.integer(cd_procedimento)))
 
-# criando duckdb
+# criando base de tabelas
 
 con <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "input/proc_hosp_amb.duckdb")
+  dbdir = "input/tabelas_tuss.duckdb")
 
 dplyr::copy_to(
   dest = con,
@@ -54,3 +56,10 @@ dplyr::copy_to(
 )
 
 DBI::dbDisconnect(con, shutdown = TRUE)
+
+# deletando arquivos importados
+
+fs::dir_ls("input/", regexp = "tabela_.") |>
+  purrr::walk(
+    fs::file_delete
+  )
