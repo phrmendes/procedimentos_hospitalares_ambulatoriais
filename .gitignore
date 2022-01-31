@@ -2,8 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
-input/duckdb
-input/*.duckdb
-input/*.duckdb.wal
+data/duckdb
+data/*.duckdb
+data/*.duckdb.wal
 output/*.duckdb.wal
 
