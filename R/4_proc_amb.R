@@ -92,7 +92,7 @@ amb <- function(urls, tabelas, index) {
 
   con <- duckdb::dbConnect(
     duckdb::duckdb(),
-    dbdir = "input/tabelas_tuss.duckdb"
+    dbdir = "data/tabelas_tuss.duckdb"
   )
 
   tabelas <- tbl(tabs, "tabelas_tuss") |>

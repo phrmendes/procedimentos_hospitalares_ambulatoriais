@@ -11,7 +11,7 @@ source("R/2_functions.R")
 
 # carregando tabelas em uma lista
 
-tabelas <- load_data("input/") |>
+tabelas <- load_data("data/") |>
   purrr::map(
     janitor::clean_names
   )
@@ -41,7 +41,7 @@ tabelas <- bind(
 
 con <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "input/tabelas_tuss.duckdb")
+  dbdir = "data/tabelas_tuss.duckdb")
 
 dplyr::copy_to(
   dest = con,
@@ -59,7 +59,7 @@ DBI::dbDisconnect(con, shutdown = TRUE)
 
 # deletando arquivos importados
 
-fs::dir_ls("input/", regexp = "tabela_.") |>
+fs::dir_ls("data/", regexp = "tabela_.") |>
   purrr::walk(
     fs::file_delete
   )

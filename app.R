@@ -1,4 +1,6 @@
+############################################
 #### SHINY - PROCEDIMENTOS HOSPITALARES ####
+############################################
 
 # bibliotecas, funções e opções -------------------------------------------
 
@@ -14,67 +16,37 @@ pacman::p_load(
   plotly,
   shinydashboardPlus,
   here,
-  geobr,
-  sf,
   MetBrewer,
+  shiny,
+  sf,
+  DBI,
+  duckdb,
   install = F
 )
+
+# install.packages("sf", configure.args = "--with-proj-lib=/usr/local/lib/")
 
 options(scipen = 999)
 
 # variáveis ---------------------------------------------------------------
 
-hosp_db <- list(
-  # ------------------------------------------------------------- #
-  `Faixa Etária` = readr::read_csv(here::here("output/base_hosp_idade.csv")) |>
-    dplyr::rename(
-      `Quantidade total` = tot_qt,
-      `Valor total` = tot_vl,
-      `Valor médio` = mean_vl
-    ) |>
-    dplyr::mutate(
-      categoria = factor(
-        categoria,
-        levels = c(
-          "< 1",
-          "1 a 4",
-          "5 a 9",
-          "10 a 14",
-          "15 a 19",
-          "20 a 29",
-          "30 a 39",
-          "40 a 49",
-          "50 a 59",
-          "60 a 69",
-          "70 a 79",
-          "80 <",
-          "N. I."
-        ) # ordenando categorias de faixa etária
-      )
-    ) |>
-    dplyr::arrange(categoria),
-  # ------------------------------------------------------------- #
-  Sexo = readr::read_csv(here::here("output/base_hosp_sexo.csv")) |>
-    dplyr::rename(
-      `Quantidade total` = tot_qt,
-      `Valor total` = tot_vl,
-      `Valor médio` = mean_vl
-    ),
-  # ------------------------------------------------------------- #
-  UF = readr::read_csv(here::here("output/base_hosp_uf.csv")) |>
-    dplyr::rename(
-      `Quantidade total` = tot_qt,
-      `Valor total` = tot_vl,
-      `Valor médio` = mean_vl
-    ),
-  # ------------------------------------------------------------- #
-  procedimentos = readr::read_csv(here::here("output/termos.csv")) |>
+shinydb <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "output/shinydb.duckdb"
+)
+
+selectize_vars <- list(
+  proc_hosp = dplyr::tbl(shinydb, "termos_hosp") |>
+    dplyr::collect() |>
     purrr::flatten_chr(),
-  # ------------------------------------------------------------- #
+  proc_amb = dplyr::tbl(shinydb, "termos_amb") |>
+    dplyr::collect() |>
+    purrr::flatten_chr(),
   categoria = c("Faixa etária", "Sexo", "UF"),
-  # ------------------------------------------------------------- #
   estatistica = c("Quantidade total", "Valor total", "Valor médio")
 )
+
+duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
 # shiny -------------------------------------------------------------------
 
@@ -112,6 +84,7 @@ sidebar <- shinydashboard::dashboardSidebar(
 
 body <- shinydashboard::dashboardBody(
   shinydashboard::tabItems(
+    # procedimentos hospitalares
     shinydashboard::tabItem(
       # seleção de parâmetros ----------------- #
       tabName = "hosp",
@@ -123,7 +96,7 @@ body <- shinydashboard::dashboardBody(
           solidHeader = TRUE,
           collapsible = TRUE,
           shiny::selectizeInput(
-            inputId = "procedimentos",
+            inputId = "procedimentos_hosp",
             label = "Selecione um procedimento",
             selected = NULL,
             choices = NULL
@@ -132,13 +105,13 @@ body <- shinydashboard::dashboardBody(
             inputId = "categoria",
             label = "Selecione uma categoria",
             selected = NULL,
-            choices = hosp_db$categoria
+            choices = selectize_vars$categoria
           ),
           shiny::selectInput(
             inputId = "estatistica",
             label = "Selecione uma estatística",
             selected = NULL,
-            choices = hosp_db$estatistica
+            choices = selectize_vars$estatistica
           )
         ),
         # gráficos ------------------------------ #
@@ -159,7 +132,55 @@ body <- shinydashboard::dashboardBody(
         )
       )
     )
-  )
+  )#,
+  # # procedimentos ambulatoriais
+  # shinydashboard::tabItem(
+  #   # seleção de parâmetros ----------------- #
+  #   tabName = "amb",
+  #   h2("Procedimentos Ambulatoriais"),
+  #   shiny::fluidRow(
+  #     shinydashboard::box(
+  #       title = "Parâmetros",
+  #       width = 6,
+  #       solidHeader = TRUE,
+  #       collapsible = TRUE,
+  #       shiny::selectizeInput(
+  #         inputId = "procedimentos_amb",
+  #         label = "Selecione um procedimento",
+  #         selected = NULL,
+  #         choices = NULL
+  #       ),
+  #       shiny::selectInput(
+  #         inputId = "categoria",
+  #         label = "Selecione uma categoria",
+  #         selected = NULL,
+  #         choices = selectize_vars$categoria
+  #       ),
+  #       shiny::selectInput(
+  #         inputId = "estatistica",
+  #         label = "Selecione uma estatística",
+  #         selected = NULL,
+  #         choices = selectize_vars$estatistica
+  #       )
+  #     ),
+  #     # gráficos ------------------------------ #
+  #     shiny::conditionalPanel(
+  #       condition = "input.estatistica == 'Quantidade total' & input.categoria == 'UF'",
+  #       shinydashboard::box(
+  #         plotly::plotlyOutput("db_map"),
+  #         width = 6,
+  #         align = "center"
+  #       )
+  #     ) # mostra mapa apenas para quando a categoria "UF" e a estatística "Quantidade total são selecionadas
+  #   ),
+  #   shiny::fluidRow(
+  #     shinydashboard::box(
+  #       plotly::plotlyOutput("db_bar"),
+  #       width = 12,
+  #       align = "center"
+  #     )
+  #   )
+  # )
 )
 
 ui <- shinydashboard::dashboardPage(
@@ -167,21 +188,40 @@ ui <- shinydashboard::dashboardPage(
   header, sidebar, body
 )
 
+input <- list(
+  categoria = "UF",
+  procedimentos = "CONSULTA EM PRONTO SOCORRO",
+  estatistica = "Quantidade total"
+)
+
 server <- function(input, output, session) {
   output$db_bar <- plotly::renderPlotly({
+    shinydb <- duckdb::dbConnect(
+      duckdb::duckdb(),
+      dbdir = "output/shinydb.duckdb"
+    )
+
     if (input$categoria == "Sexo") {
-      dados <- hosp_db$Sexo
+      dados <- dplyr::tbl(shinydb, "base_hosp_sexo") |>
+        dplyr::collect()
     } else if (input$categoria == "UF") {
-      dados <- hosp_db$UF
+      dados <- dplyr::tbl(shinydb, "base_hosp_uf") |>
+        dplyr::collect()
     } else {
-      dados <- hosp_db$`Faixa Etária`
+      dados <- dplyr::tbl(shinydb, "base_hosp_idade") |>
+        dplyr::collect()
     }
 
+    duckdb::dbDisconnect(shinydb, shutdown = TRUE)
+
     dados <- dados |>
+      dplyr::rename(
+        `Quantidade total` = tot_qt,
+        `Valor total` = tot_vl,
+        `Valor médio` = mean_vl
+      ) |>
       dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>
-      dplyr::select(
-        c(categoria, starts_with(glue::glue("{input$estatistica}")))
-      )
+      dplyr::select(categoria, starts_with(glue::glue("{input$estatistica}")))
 
     plot_bar <- dados |>
       ggplot() +
@@ -210,15 +250,22 @@ server <- function(input, output, session) {
   }) # gráfico de barras
 
   output$db_map <- plotly::renderPlotly({
-    dados <- hosp_db$UF
+    shinydb <- duckdb::dbConnect(
+      duckdb::duckdb(),
+      dbdir = "output/shinydb.duckdb"
+    )
+
+    dados <- dplyr::tbl(shinydb, "base_hosp_uf") |>
+      dplyr::collect()
+
+    duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
     ufs <- readRDS(here::here("output/geom_ufs.rds"))
 
     plot_map <- dados |>
       dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>
-      dplyr::select(
-        c(categoria, starts_with(glue::glue("{input$estatistica}")))
-      ) |>
+      dplyr::select(categoria, tot_qt) |>
+      dplyr::rename(`Quantidade total` = tot_qt) |>
       dplyr::left_join(
         ufs,
         by = "categoria"
@@ -253,10 +300,19 @@ server <- function(input, output, session) {
     plotly::ggplotly(plot_map)
   }) # mapa
 
+  # opções server-side
+
   shiny::updateSelectizeInput(
     session,
-    inputId = "procedimentos",
-    choices = hosp_db$procedimentos,
+    inputId = "procedimentos_hosp",
+    choices = selectize_vars$proc_hosp,
+    server = TRUE
+  )
+
+  shiny::updateSelectizeInput(
+    session,
+    inputId = "procedimentos_amb",
+    choices = selectize_vars$proc_amb,
     server = TRUE
   ) # opções server-side
 }

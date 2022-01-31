@@ -82,14 +82,14 @@ pbapply::pblapply(
 
 con <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "input/proc.duckdb"
+  dbdir = "data/proc.duckdb"
 )
 
 # passando tabelas tuss para a database atual
 
 tabs <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "input/tabelas_tuss.duckdb"
+  dbdir = "data/tabelas_tuss.duckdb"
 )
 
 tuss <- dplyr::tbl(tabs, "tabelas_tuss") |>
@@ -151,18 +151,18 @@ purrr::walk(
 
 DBI::dbExecute(
   conn = con,
-  statement = "COPY proc TO 'input/proc.csv'"
+  statement = "COPY proc TO 'data/proc.csv'"
 )
 
 duckdb::dbDisconnect(con, shutdown = TRUE)
 
-fs::file_delete("input/proc.duckdb")
+fs::file_delete("data/proc.duckdb")
 
 # criando nova database limpa
 
 con <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "input/proc_hosp.duckdb"
+  dbdir = "data/proc_hosp.duckdb"
 )
 
 DBI::dbExecute(
@@ -175,13 +175,13 @@ DBI::dbExecute(
 
 DBI::dbExecute(
   conn = con,
-  statement = "COPY proc FROM 'input/proc.csv' (HEADER 0)")
+  statement = "COPY proc FROM 'data/proc.csv' (HEADER 0)")
 
 DBI::dbExecute(
   conn = con,
   statement = "CREATE INDEX idx ON proc_hosp (id_evento_atencao_saude, cd_procedimento, faixa_etaria, sexo, uf_prestador)")
 
-fs::file_delete("input/proc.csv")
+fs::file_delete("data/proc.csv")
 
 # desligando base
 

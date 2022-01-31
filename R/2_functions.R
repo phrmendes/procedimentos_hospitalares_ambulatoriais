@@ -74,7 +74,7 @@ unpack_write_db <- function(url, cols, name, indexes) {
 
   con <- duckdb::dbConnect(
     duckdb::duckdb(),
-    dbdir = "input/proc.duckdb"
+    dbdir = "data/proc.duckdb"
   )
 
   duckdb::dbWriteTable(
@@ -165,7 +165,7 @@ load_data <- function(x) {
 import_shinydb <- function(x, complete_vars, db_name, table) {
   con <- duckdb::dbConnect(
     duckdb::duckdb(),
-    dbdir = "input/proc_hosp.duckdb"
+    dbdir = "data/proc_hosp.duckdb"
   )
 
   shinydb <- duckdb::dbConnect(

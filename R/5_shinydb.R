@@ -16,7 +16,7 @@ shinydb <- duckdb::dbConnect(
 
 con <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "input/proc_hosp.duckdb"
+  dbdir = "data/proc_hosp.duckdb"
 )
 
 # shapefile de estados ----------------------------------------------------
