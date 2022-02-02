@@ -6,14 +6,111 @@
 #' pacote "googleComputeEngineR" em uma máquina "n1-standard-8". O
 #' loop de exportação foi executado de 5 em 5 estados.
 
-# bibliotecas, funções e parâmetros ---------------------------------------
+# bibliotecas -------------------------------------------------------------
 
-source("R/1_libraries.R")
-source("R/2_functions.R")
+if (!require("pacman")) install.packages("pacman")
 
-future::plan(multisession) # habilitando multithread
+pacman::p_load(
+  data.table,
+  collapse,
+  tidyverse,
+  glue,
+  tidyfast,
+  future,
+  furrr,
+  pbapply,
+  janitor,
+  fs,
+  duckdb,
+  install = F
+)
+
+# funções -----------------------------------------------------------------
+
+# função para seleção de bases por ano, estado, mês e período
+
+base <- function(ano, estado, mes, base, url, proc) {
+  x <- tibble::tibble(
+    a = glue::glue("{url}{ano}/"),
+    b = estado,
+    c = glue::glue("_{ano}"),
+  ) |> # criando tibble base para operação
+    dplyr::group_by(a, b, c) |>
+    tidyr::nest() |> # criando subtibbles para cada região
+    dplyr::mutate(
+      d = glue::glue("/{b}"), # adicionando coluna auxiliar para união de url
+      data = purrr::map(
+        data,
+        ~ tibble::tibble(
+          e = mes, # criando coluna de meses em cada subtiblle
+          f = glue::glue("_{proc}_{base}.zip"),
+          mes = mes,
+        )
+      )
+    ) |>
+    tidyr::unnest(cols = c(data)) |>
+    tidyr::unite("url",
+                 c(a, b, d, c, e, f),
+                 sep = ""
+    )
+
+  return(x)
+}
+
+# função de descompactação e leitura
+
+unpack_read <- function(url, mes, cols) {
+  temp <- tempfile()
+
+  tempdir <- tempdir()
+
+  download.file(
+    url = url,
+    destfile = temp,
+    method = "auto",
+    quiet = T
+  )
+
+  csv_file <- unzip(
+    zipfile = temp,
+    exdir = tempdir
+  )
+
+  x <- data.table::fread(
+    input = csv_file,
+    encoding = "UTF-8",
+    select = stringr::str_to_upper(cols),
+    sep = ";",
+    dec = ","
+  ) |> janitor::clean_names()
+
+  x <- x[
+    ,
+    collapse::na_omit(x)
+  ][
+    ,
+    mes := mes
+  ]
+
+  purrr::walk(
+    c(temp, csv_file),
+    ~ fs::file_delete(glue::glue("{.x}"))
+  )
+
+  gc()
+
+  return(x)
+}
+
+`%not_in%` <- Negate(`%in%`)
+
+# parâmetros --------------------------------------------------------------
+
+# future::plan(multisession) # habilitando multithread
 
 # memory.size(max = 10^12)
+
+future::plan(multicore) # habilitando multithread
 
 # definindo termos da buscas no dados abertos -----------------------------
 
@@ -36,95 +133,83 @@ urls <- purrr::map(
   )
 ) # dividindo urls por base e por estado
 
+# dicionário de termos ----------------------------------------------------
+
+con <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "data/tabelas_tuss.duckdb"
+)
+
+tabelas <- tbl(con, "tabelas_tuss") |>
+  dplyr::collect()
+
+duckdb::dbDisconnect(con, shutdown = TRUE)
+
 # função de tratamento de dados ambulatoriais -----------------------------
 
-amb <- function(urls, tabelas, index) {
+amb <- function(urls, index, tabelas) {
 
-  ## download e leitura de dados ----
+  # download e leitura de dados ----
 
-  base_det <- furrr::future_map_dfr(
-    urls[[1]][[index]],
+  base_det <- furrr::future_map2_dfr(
+    urls[[1]][[index]]$url, urls[[1]][[index]]$mes,
     ~ unpack_read(
-      .x,
-      c(
-        "ID_EVENTO_ATENCAO_SAUDE",
-        "UF_PRESTADOR",
-        "CD_PROCEDIMENTO",
-        "CD_TABELA_REFERENCIA",
-        "QT_ITEM_EVENTO_INFORMADO",
-        "VL_ITEM_EVENTO_INFORMADO"
+      url = .x,
+      mes = .y,
+      cols = c(
+        "cd_procedimento",
+        "id_evento_atencao_saude",
+        "uf_prestador",
+        "cd_tabela_referencia",
+        "qt_item_evento_informado",
+        "vl_item_evento_informado"
       )
     )
-  ) |>
-    janitor::clean_names()
+  ) |> collapse::funique(cols = c("cd_procedimento", "id_evento_atencao_saude", "mes"))
 
-  base_cons <- furrr::future_map_dfr(
-    urls[[2]][[index]],
+  base_cons <- furrr::future_map2_dfr(
+    urls[[2]][[index]]$url, urls[[2]][[index]]$mes,
     ~ unpack_read(
-      .x,
-      c(
-        "ID_EVENTO_ATENCAO_SAUDE",
-        "FAIXA_ETARIA",
-        "SEXO"
+      url = .x,
+      mes = .y,
+      cols = c(
+        "id_evento_atencao_saude",
+        "faixa_etaria",
+        "sexo"
       )
     )
-  ) |>
-    janitor::clean_names()
+  ) |> collapse::funique(cols = c("id_evento_atencao_saude", "mes"))
 
-  base_det <- base_det[, collapse::na_omit(base_det)]
+  data.table::setkey(base_det, id_evento_atencao_saude, mes)
 
-  base_cons <- base_cons[, collapse::na_omit(base_cons)]
+  data.table::setkey(base_cons,  id_evento_atencao_saude, mes)
 
   base_amb <- data.table::merge.data.table(
     base_det,
     base_cons,
-    on = "id_evento_atencao_saude"
+    all.x = TRUE,
+    on = c("id_evento_atencao_saude", "mes")
   )
+
+  # join por dicionário ----
 
   base_amb <- base_amb[
     cd_tabela_referencia != 0 &
       cd_tabela_referencia != 9 &
       cd_tabela_referencia != 98,
     !"cd_tabela_referencia"
-  ]
-
-  ## join por dicionário ----
-
-  con <- duckdb::dbConnect(
-    duckdb::duckdb(),
-    dbdir = "data/tabelas_tuss.duckdb"
-  )
-
-  tabelas <- tbl(tabs, "tabelas_tuss") |>
-    dplyr::collect()
-
-  base_amb[
-    ,
-    cd_procedimento := as.numeric(cd_procedimento)
-  ]
+  ][
+    cd_procedimento %in% tabelas$cd_procedimento
+  ] # filtrando tabelas e procedimentos sem informações
 
   base_amb <- data.table::merge.data.table(
     base_amb,
     tabelas,
     by = "cd_procedimento",
-    allow.cartesian = TRUE
+    all.x = TRUE
   )
 
-  base_amb[
-    ,
-    ":="(termo = collapse::replace_NA(
-      termo,
-      "Sem informações"
-    ),
-    tabela = collapse::replace_NA(
-      tabela,
-      "Sem informações"
-    ))
-  ]
-
-  duckdb::dbDisconnect(con, shutdown = TRUE)
-
-  ## lista de procedimentos disponíveis ----
+  # lista de procedimentos disponíveis ----
 
   base_amb[
     ,
@@ -143,7 +228,7 @@ amb <- function(urls, tabelas, index) {
       "output/termos_amb.csv",
       append = TRUE)
 
-  ## estatísticas por estado ----
+  # estatísticas por estado ----
 
   base_amb_uf <- base_amb[
     ,
@@ -162,8 +247,6 @@ amb <- function(urls, tabelas, index) {
       termo,
       stringr::str_to_upper
     )
-  ][
-    termo != "SEM INFORMAÇÕES"
   ][
     ,
     furrr::future_map(
@@ -185,7 +268,7 @@ amb <- function(urls, tabelas, index) {
     append = TRUE
   )
 
-  ## estatísticas por faixa etária ----
+  # estatísticas por faixa etária ----
 
   base_amb_idade <- base_amb[
     ,
@@ -232,7 +315,7 @@ amb <- function(urls, tabelas, index) {
     append = TRUE
   )
 
-  ## estatísticas por sexo ----
+  # estatísticas por sexo ----
 
   base_amb_sexo <- base_amb[
     ,
@@ -275,10 +358,10 @@ amb <- function(urls, tabelas, index) {
 
 # exportando dados --------------------------------------------------------
 
-for (i in 1:27) {
+for (i in 11:15) {
   furrr::future_walk(
     i,
-    ~ amb(urls, tabelas, .x)
+    ~ amb(urls, .x, tabelas)
   )
 
   print(i)

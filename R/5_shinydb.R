@@ -57,6 +57,8 @@ duckdb::dbWriteTable(
 
 # estatísticas por estado
 
+estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+
 import_shinydb(
   x = "uf_prestador",
   complete_vars = estados,
@@ -107,6 +109,26 @@ paths |>
   purrr::walk(
     fs::file_delete
   )
+
+
+# renomeando colunas ------------------------------------------------------
+
+dbs <- duckdb::dbListTables(shinydb) |>
+  stringr::str_subset("base")
+
+old_name <- c("tot_qt", "tot_vl", "mean_vl")
+
+new_name <- c("Quantidade total", "Valor total", "Valor médio")
+
+queries <- purrr::map_dfr(
+  dbs,
+  ~ build_queries(.x, old_name, new_name)
+) |> purrr::flatten_chr()
+
+purrr::walk(
+  queries,
+  ~ DBI::dbExecute(conn = shinydb, statement = .x)
+)
 
 # desconectando
 

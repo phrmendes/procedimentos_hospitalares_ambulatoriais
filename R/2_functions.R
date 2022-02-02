@@ -14,7 +14,8 @@ base <- function(ano, estado, mes, base, url, proc) {
         data,
         ~ tibble::tibble(
           e = mes, # criando coluna de meses em cada subtiblle
-          f = glue::glue("_{proc}_{base}.zip")
+          f = glue::glue("_{proc}_{base}.zip"),
+          mes = mes,
         )
       )
     ) |>
@@ -22,15 +23,14 @@ base <- function(ano, estado, mes, base, url, proc) {
     tidyr::unite("url",
       c(a, b, d, c, e, f),
       sep = ""
-    ) |> # juntando tudo em uma url só
-    purrr::flatten_chr() # criando um vetor de urls
+    )
 
   return(x)
 }
 
 # função de descompactação, leitura e escrita na database (hosp) ----------
 
-unpack_write_db <- function(url, cols, name, indexes) {
+unpack_write_db <- function(url, mes, dic, cols, name, indexes) {
   temp <- tempfile()
 
   tempdir <- tempdir()
@@ -61,16 +61,16 @@ unpack_write_db <- function(url, cols, name, indexes) {
     collapse::na_omit(x)
   ][
     ,
+    mes := mes
+  ][
+    ,
     id_evento_atencao_saude := as.character(id_evento_atencao_saude)
-  ]
+  ] |>
+    collapse::funique(cols = c("id_evento_atencao_saude", "mes"))
 
-  if (c("cd_tabela_referencia") %in% names(x) == TRUE) {
-    x <- x[
-      !(cd_tabela_referencia %in% c(0, 9, 98))
-    ][
-      cd_procedimento != "TABELA PRÓPRIA"
-    ]
-  }
+  if (c("cd_tabela_referencia") %in% names(x) == TRUE) x <- x[!(cd_tabela_referencia %in% c(0, 9, 98))]
+
+  if (c("cd_procedimento") %in% names(x) == TRUE) x <- x[cd_procedimento %in% dic$cd_procedimento]
 
   con <- duckdb::dbConnect(
     duckdb::duckdb(),
@@ -93,43 +93,10 @@ unpack_write_db <- function(url, cols, name, indexes) {
   )
 
   duckdb::dbDisconnect(con, shutdown = TRUE)
-}
-
-# função de descompactação e leitura (amb) --------------------------------
-
-unpack_read <- function(url, cols) {
-  temp <- tempfile()
-
-  tempdir <- tempdir()
-
-  download.file(
-    url = url,
-    destfile = temp,
-    method = "auto",
-    quiet = T
-  )
-
-  csv_file <- unzip(
-    zipfile = temp,
-    exdir = tempdir
-  )
-
-  x <- data.table::fread(
-    input = csv_file,
-    encoding = "UTF-8",
-    select = cols,
-    sep = ";",
-    dec = ","
-  )
-
-  purrr::walk(
-    c(temp, csv_file),
-    ~ fs::file_delete(glue::glue("{.x}"))
-  )
 
   gc()
 
-  return(x)
+  return("Importado!")
 }
 
 # função que cria dummies que indicam as tabelas base ---------------------
@@ -271,4 +238,31 @@ import_shinydb <- function(x, complete_vars, db_name, table) {
   )
 
   return("Importado!")
+}
+
+# função que cria queries para renomear colunas ---------------------------
+
+build_queries <- function(tbl, name1, name2){
+  x <- tibble::tibble(
+    a = "ALTER TABLE",
+    b = glue::glue("{tbl}"),
+    c = "RENAME COLUMN"
+  ) |>
+    dplyr::group_by(a, b, c) |>
+    tidyr::nest() |>
+    dplyr::mutate(
+      data = purrr::map(
+        data,
+        ~ tibble::tibble(
+          d = old_name,
+          e = "TO",
+          f = glue::glue('"{new_name}"')
+        ) |>
+          tidyr::unite("d", d:f, sep = " ")
+      )
+    ) |>
+    tidyr::unnest(cols = c(data)) |>
+    tidyr::unite("queries", a:d, sep = " ")
+
+  return(x)
 }

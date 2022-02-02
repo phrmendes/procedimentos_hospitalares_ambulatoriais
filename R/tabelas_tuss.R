@@ -35,7 +35,8 @@ tabelas <- bind(
   tabelas$tabela_63
 ) |>
   dplyr::rename(cd_procedimento = codigo_do_termo) |>
-  dplyr::mutate(cd_procedimento = as.character(as.integer(cd_procedimento)))
+  dplyr::mutate(cd_procedimento = as.character(as.integer(cd_procedimento))) |>
+  dplyr::distinct(cd_procedimento, .keep_all = T)
 
 # criando base de tabelas
 

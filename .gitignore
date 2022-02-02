@@ -6,4 +6,5 @@ data/duckdb
 data/*.duckdb
 data/*.duckdb.wal
 output/*.duckdb.wal
-
+output/*.csv
+pendências.md

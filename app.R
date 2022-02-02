@@ -48,6 +48,8 @@ selectize_vars <- list(
 
 duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
+ufs <- readRDS(here::here("output/geom_ufs.rds"))
+
 # shiny -------------------------------------------------------------------
 
 header <- shinydashboard::dashboardHeader(
@@ -118,7 +120,7 @@ body <- shinydashboard::dashboardBody(
         shiny::conditionalPanel(
           condition = "input.estatistica == 'Quantidade total' & input.categoria == 'UF'",
           shinydashboard::box(
-            plotly::plotlyOutput("db_map"),
+            plotly::plotlyOutput("hosp_map"),
             width = 6,
             align = "center"
           )
@@ -126,61 +128,61 @@ body <- shinydashboard::dashboardBody(
       ),
       shiny::fluidRow(
         shinydashboard::box(
-          plotly::plotlyOutput("db_bar"),
+          plotly::plotlyOutput("hosp_bar"),
+          width = 12,
+          align = "center"
+        )
+      )
+    ),
+    # procedimentos ambulatoriais
+    shinydashboard::tabItem(
+      # seleção de parâmetros ----------------- #
+      tabName = "amb",
+      h2("Procedimentos Ambulatoriais"),
+      shiny::fluidRow(
+        shinydashboard::box(
+          title = "Parâmetros",
+          width = 6,
+          solidHeader = TRUE,
+          collapsible = TRUE,
+          shiny::selectizeInput(
+            inputId = "procedimentos_amb",
+            label = "Selecione um procedimento",
+            selected = NULL,
+            choices = NULL
+          ),
+          shiny::selectInput(
+            inputId = "categoria",
+            label = "Selecione uma categoria",
+            selected = NULL,
+            choices = selectize_vars$categoria
+          ),
+          shiny::selectInput(
+            inputId = "estatistica",
+            label = "Selecione uma estatística",
+            selected = NULL,
+            choices = selectize_vars$estatistica
+          )
+        ),
+        # gráficos ------------------------------ #
+        shiny::conditionalPanel(
+          condition = "input.estatistica == 'Quantidade total' & input.categoria == 'UF'",
+          shinydashboard::box(
+            plotly::plotlyOutput("amb_map"),
+            width = 6,
+            align = "center"
+          )
+        ) # mostra mapa apenas para quando a categoria "UF" e a estatística "Quantidade total são selecionadas
+      ),
+      shiny::fluidRow(
+        shinydashboard::box(
+          plotly::plotlyOutput("amb_bar"),
           width = 12,
           align = "center"
         )
       )
     )
-  )#,
-  # # procedimentos ambulatoriais
-  # shinydashboard::tabItem(
-  #   # seleção de parâmetros ----------------- #
-  #   tabName = "amb",
-  #   h2("Procedimentos Ambulatoriais"),
-  #   shiny::fluidRow(
-  #     shinydashboard::box(
-  #       title = "Parâmetros",
-  #       width = 6,
-  #       solidHeader = TRUE,
-  #       collapsible = TRUE,
-  #       shiny::selectizeInput(
-  #         inputId = "procedimentos_amb",
-  #         label = "Selecione um procedimento",
-  #         selected = NULL,
-  #         choices = NULL
-  #       ),
-  #       shiny::selectInput(
-  #         inputId = "categoria",
-  #         label = "Selecione uma categoria",
-  #         selected = NULL,
-  #         choices = selectize_vars$categoria
-  #       ),
-  #       shiny::selectInput(
-  #         inputId = "estatistica",
-  #         label = "Selecione uma estatística",
-  #         selected = NULL,
-  #         choices = selectize_vars$estatistica
-  #       )
-  #     ),
-  #     # gráficos ------------------------------ #
-  #     shiny::conditionalPanel(
-  #       condition = "input.estatistica == 'Quantidade total' & input.categoria == 'UF'",
-  #       shinydashboard::box(
-  #         plotly::plotlyOutput("db_map"),
-  #         width = 6,
-  #         align = "center"
-  #       )
-  #     ) # mostra mapa apenas para quando a categoria "UF" e a estatística "Quantidade total são selecionadas
-  #   ),
-  #   shiny::fluidRow(
-  #     shinydashboard::box(
-  #       plotly::plotlyOutput("db_bar"),
-  #       width = 12,
-  #       align = "center"
-  #     )
-  #   )
-  # )
+  )
 )
 
 ui <- shinydashboard::dashboardPage(
@@ -195,7 +197,10 @@ input <- list(
 )
 
 server <- function(input, output, session) {
-  output$db_bar <- plotly::renderPlotly({
+
+  # procedimentos hospitalares ----
+
+  output$hosp_bar <- plotly::renderPlotly({
     shinydb <- duckdb::dbConnect(
       duckdb::duckdb(),
       dbdir = "output/shinydb.duckdb"
@@ -215,13 +220,8 @@ server <- function(input, output, session) {
     duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
     dados <- dados |>
-      dplyr::rename(
-        `Quantidade total` = tot_qt,
-        `Valor total` = tot_vl,
-        `Valor médio` = mean_vl
-      ) |>
-      dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>
-      dplyr::select(categoria, starts_with(glue::glue("{input$estatistica}")))
+      dplyr::filter(termo == input$procedimentos) |>
+      dplyr::select(categoria, dplyr::starts_with(glue::glue("{input$estatistica}")))
 
     plot_bar <- dados |>
       ggplot() +
@@ -249,7 +249,7 @@ server <- function(input, output, session) {
     plotly::ggplotly(plot_bar)
   }) # gráfico de barras
 
-  output$db_map <- plotly::renderPlotly({
+  output$hosp_map <- plotly::renderPlotly({
     shinydb <- duckdb::dbConnect(
       duckdb::duckdb(),
       dbdir = "output/shinydb.duckdb"
@@ -260,7 +260,105 @@ server <- function(input, output, session) {
 
     duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
-    ufs <- readRDS(here::here("output/geom_ufs.rds"))
+    plot_map <- dados |>
+      dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>
+      dplyr::select(categoria, tot_qt) |>
+      dplyr::rename(`Quantidade total` = tot_qt) |>
+      dplyr::left_join(
+        ufs,
+        by = "categoria"
+      ) |>
+      # dplyr::filter(termo == "ANESTESIAS") |>
+      ggplot() +
+      geom_sf(
+        aes(
+          geometry = geom,
+          fill = `Quantidade total`
+        ),
+        color = NA
+      ) +
+      theme_minimal() +
+      scale_fill_gradientn(colors = MetBrewer::met.brewer("Ingres")) +
+      theme(
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+      ) +
+      ggtitle(
+        stringr::str_to_upper(
+          glue::glue(
+            "{input$estatistica} de procedimentos por {input$categoria}"
+          )
+        )
+      )
+
+    plotly::ggplotly(plot_map)
+  }) # mapa
+
+  # procedimentos ambulatoriais ----
+
+  output$amb_bar <- plotly::renderPlotly({
+    shinydb <- duckdb::dbConnect(
+      duckdb::duckdb(),
+      dbdir = "output/shinydb.duckdb"
+    )
+
+    if (input$categoria == "Sexo") {
+      dados <- dplyr::tbl(shinydb, "base_amb_sexo") |>
+        dplyr::collect()
+    } else if (input$categoria == "UF") {
+      dados <- dplyr::tbl(shinydb, "base_amb_uf") |>
+        dplyr::collect()
+    } else {
+      dados <- dplyr::tbl(shinydb, "base_amb_idade") |>
+        dplyr::collect()
+    }
+
+    duckdb::dbDisconnect(shinydb, shutdown = TRUE)
+
+    dados <- dados |>
+      dplyr::filter(termo == input$procedimentos) |>
+      dplyr::select(categoria, dplyr::starts_with(glue::glue("{input$estatistica}")))
+
+    plot_bar <- dados |>
+      ggplot() +
+      geom_col(
+        aes_string(
+          x = names(dados)[1],
+          y = glue::glue("`{names(dados)[2]}`"),
+          fill = names(dados)[1]
+        )
+      ) +
+      ggtitle(
+        stringr::str_to_upper(
+          glue::glue("{input$estatistica} de procedimentos por {input$categoria}")
+        )
+      ) +
+      theme_minimal() +
+      xlab(glue::glue("{input$categoria}")) +
+      theme(legend.position = "none") +
+      scale_fill_manual(values = MetBrewer::met.brewer(
+        name = "Ingres",
+        n = 27,
+        type = "continuous"
+      ))
+
+    plotly::ggplotly(plot_bar)
+  }) # gráfico de barras
+
+  output$amb_map <- plotly::renderPlotly({
+    shinydb <- duckdb::dbConnect(
+      duckdb::duckdb(),
+      dbdir = "output/shinydb.duckdb"
+    )
+
+    dados <- dplyr::tbl(shinydb, "base_amb_uf") |>
+      dplyr::collect()
+
+    duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
     plot_map <- dados |>
       dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>

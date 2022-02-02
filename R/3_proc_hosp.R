@@ -7,9 +7,19 @@
 source("R/1_libraries.R")
 source("R/2_functions.R")
 
-future::plan(multisession) # habilitando multithread
-
 # memory.size(max = 10^12)
+
+# dicionário de termos ----------------------------------------------------
+
+tabs <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "data/tabelas_tuss.duckdb"
+)
+
+tuss <- dplyr::tbl(tabs, "tabelas_tuss") |>
+  dplyr::collect()
+
+duckdb::dbDisconnect(tabs, shutdown = TRUE)
 
 # definindo termos da buscas no dados abertos -----------------------------
 
@@ -31,11 +41,12 @@ urls <- purrr::map(
 
 # download e escrita em database ------------------------------------------
 
-pbapply::pblapply(
-  urls[[1]],
-  function(i) {
+pbapply::pbmapply(
+  function(x, y, z) {
     unpack_write_db(
-      url = i,
+      url = x,
+      mes = y,
+      dic = tuss,
       cols = c(
         "cd_procedimento",
         "id_evento_atencao_saude",
@@ -46,24 +57,29 @@ pbapply::pblapply(
       ),
       name = "base_det",
       indexes = list(
-        "cd_procedimento",
         "id_evento_atencao_saude",
+        "mes",
+        "cd_procedimento",
         "uf_prestador"
       )
     )
-  }
+  },
+  x = urls[[1]]$url,
+  y = urls[[1]]$mes,
+  z = tuss,
+  SIMPLIFY = FALSE
 )
 
-pbapply::pblapply(
-  urls[[2]],
-  function(i) {
+pbapply::pbmapply(
+  function(x, y, z) {
     unpack_write_db(
-      url = i,
+      url = x,
+      mes = y,
+      dic = tuss,
       cols = c(
         "id_evento_atencao_saude",
         "faixa_etaria",
-        "sexo",
-        "cd_carater_atendimento"
+        "sexo"
       ),
       name = "base_cons",
       indexes = list(
@@ -72,9 +88,12 @@ pbapply::pblapply(
         "faixa_etaria",
       )
     )
-  }
+  },
+  x = urls[[2]]$url,
+  y = urls[[2]]$mes,
+  z = tuss,
+  SIMPLIFY = FALSE
 )
-
 
 # tratando database -------------------------------------------------------
 
@@ -87,14 +106,6 @@ con <- duckdb::dbConnect(
 
 # passando tabelas tuss para a database atual
 
-tabs <- duckdb::dbConnect(
-  duckdb::duckdb(),
-  dbdir = "data/tabelas_tuss.duckdb"
-)
-
-tuss <- dplyr::tbl(tabs, "tabelas_tuss") |>
-  dplyr::collect()
-
 duckdb::dbWriteTable(
   conn = con,
   value = tuss,
@@ -103,15 +114,13 @@ duckdb::dbWriteTable(
   temporary = FALSE
 )
 
-duckdb::dbDisconnect(tabs, shutdown = TRUE)
-
 # joins
 
 subquery <- glue::glue_sql(
   "SELECT *
-  FROM base_cons AS cons
-  JOIN base_det AS det
-  ON cons.id_evento_atencao_saude = det.id_evento_atencao_saude",
+  FROM base_det AS det
+  LEFT JOIN base_cons AS cons
+  ON det.id_evento_atencao_saude = cons.id_evento_atencao_saude",
   .con = con
 )
 
@@ -139,7 +148,7 @@ purrr::walk(
 )
 
 purrr::walk(
-  c("cd_procedimento:1", "id_evento_atencao_saude:1"),
+  c("cd_procedimento:1", "id_evento_atencao_saude:1", "mes:1"),
   ~ DBI::dbExecute(
     conn = con,
     statement = glue::glue(
@@ -151,7 +160,7 @@ purrr::walk(
 
 DBI::dbExecute(
   conn = con,
-  statement = "COPY proc TO 'data/proc.csv'"
+  statement = "COPY proc TO 'data/proc.csv' WITH (HEADER 1)"
 )
 
 duckdb::dbDisconnect(con, shutdown = TRUE)
@@ -169,13 +178,12 @@ DBI::dbExecute(
   conn = con,
   statement = "CREATE SCHEMA pg_catalog")
 
-DBI::dbExecute(
+duckdb::duckdb_read_csv(
   conn = con,
-  statement = "CREATE TABLE proc_hosp(id_evento_atencao_saude VARCHAR, faixa_etaria VARCHAR, sexo VARCHAR, cd_carater_atendimento INTEGER, cd_procedimento VARCHAR, uf_prestador VARCHAR, cd_tabela_referencia INTEGER, qt_item_evento_informado INTEGER, vl_item_evento_informado DOUBLE, termo VARCHAR, tabela VARCHAR)")
-
-DBI::dbExecute(
-  conn = con,
-  statement = "COPY proc FROM 'data/proc.csv' (HEADER 0)")
+  name = "proc_hosp",
+  files = "data/proc.csv",
+  header = TRUE
+)
 
 DBI::dbExecute(
   conn = con,
@@ -186,4 +194,3 @@ fs::file_delete("data/proc.csv")
 # desligando base
 
 duckdb::dbDisconnect(con, shutdown = TRUE)
-
