@@ -44,7 +44,7 @@ base <- function(ano, estado, mes, base, url, proc) {
         ~ tibble::tibble(
           e = mes, # criando coluna de meses em cada subtiblle
           f = glue::glue("_{proc}_{base}.zip"),
-          mes = mes,
+          mes = as.numeric(mes),
         )
       )
     ) |>
@@ -57,50 +57,260 @@ base <- function(ano, estado, mes, base, url, proc) {
   return(x)
 }
 
-# função de descompactação e leitura
+# função de tratamento de dados mensal
 
-unpack_read <- function(url, mes, cols) {
-  temp <- tempfile()
+tratamento_por_mes <- function(url_det, url_cons, cols, tabelas) {
 
-  tempdir <- tempdir()
+  download_export <- function(i){
+    url_det <- url_det |>
+      dplyr::filter(mes == i)
 
-  download.file(
-    url = url,
-    destfile = temp,
-    method = "auto",
-    quiet = T
+    url_cons <- url_cons |>
+      dplyr::filter(mes == i)
+
+    temp1 <- tempfile()
+
+    temp2 <- tempfile()
+
+    tempdir <- tempdir()
+
+    # download, descompactação e leitura ----
+
+    purrr::walk2(
+      .x = c(url_det$url, url_cons$url),
+      .y = c(temp1, temp2),
+      ~ download.file(
+        url = .x,
+        destfile = .y,
+        method = "auto",
+        quiet = TRUE
+      )
+    )
+
+    csv_files <- purrr::map_chr(
+      .x = c(temp1, temp2),
+      ~ unzip(
+        zipfile = .x,
+        exdir = tempdir
+      )
+    )
+
+    x <- purrr::map2(
+      .x = csv_files,
+      .y = cols,
+      ~ data.table::fread(
+        input = .x,
+        encoding = "UTF-8",
+        select = stringr::str_to_upper(.y),
+        sep = ";",
+        dec = ","
+      ) |>
+        janitor::clean_names()
+    )
+
+    x <- x |>
+      purrr::map(
+        ~ .x[
+          ,
+          collapse::na_omit(.x)
+        ][
+          ,
+          mes := i
+        ]
+    )
+
+    # joins ----
+
+    purrr::walk(
+      x,
+      ~ data.table::setkey(.x, id_evento_atencao_saude, mes)
+    )
+
+    base_amb <- data.table::merge.data.table(
+      x[[1]],
+      x[[2]],
+      all.x = TRUE,
+      on = c("id_evento_atencao_saude", "mes")
+    ) |> collapse::funique(c(
+      "id_evento_atencao_saude",
+      "cd_procedimento",
+      "mes"))
+
+    # join por dicionário
+
+    base_amb <- base_amb[
+      cd_tabela_referencia != 0 &
+        cd_tabela_referencia != 9 &
+        cd_tabela_referencia != 98,
+      !"cd_tabela_referencia"
+    ][
+      cd_procedimento %in% tabelas$cd_procedimento
+    ] # filtrando tabelas e procedimentos sem informações
+
+    base_amb <- data.table::merge.data.table(
+      base_amb,
+      tabelas,
+      by = "cd_procedimento",
+      all.x = TRUE
+    )
+
+    # lista de procedimentos disponíveis ----
+
+    base_amb[
+      ,
+      collapse::funique(.SD, cols = "termo")
+    ][
+      ,
+      "termo"
+    ][
+      ,
+      termo := stringr::str_to_upper(termo)
+    ] |>
+      data.table::fwrite(
+        "output/termos_amb.csv",
+        append = TRUE)
+
+    # estatísticas por estado ----
+
+    base_amb_uf <- base_amb[
+      ,
+      .(
+        tot_qt = collapse::fsum(qt_item_evento_informado),
+        tot_vl = collapse::fsum(vl_item_evento_informado)
+      ),
+      keyby = c("cd_procedimento", "termo", "uf_prestador")
+    ][
+      ,
+      mean_vl := round(tot_vl / tot_qt, 2),
+      keyby = c("cd_procedimento", "termo", "uf_prestador")
+    ][
+      ,
+      termo := stringr::str_to_upper(termo)
+    ][
+      ,
+      purrr::map(
+        .SD,
+        collapse::replace_NA,
+        value = 0
+      )
+    ]
+
+    data.table::setnames(
+      base_amb_uf,
+      old = "uf_prestador",
+      new = "categoria"
+    )
+
+    data.table::fwrite(
+      base_amb_uf,
+      "output/base_amb_uf.csv",
+      append = TRUE
+    )
+
+    # estatísticas por faixa etária ----
+
+    base_amb_idade <- base_amb[
+      ,
+      .(
+        tot_qt = collapse::fsum(qt_item_evento_informado),
+        tot_vl = collapse::fsum(vl_item_evento_informado)
+      ),
+      keyby = c("cd_procedimento", "termo", "faixa_etaria")
+    ][
+      ,
+      mean_vl := round(tot_vl / tot_qt, 2),
+      keyby = c("cd_procedimento", "termo", "faixa_etaria")
+    ]    [
+      ,
+      termo := stringr::str_to_upper(termo)
+    ][
+      ,
+      faixa_etaria := tidyfast::dt_case_when(
+        faixa_etaria == "<1" ~ "< 1",
+        faixa_etaria == "80 ou mais" ~ "80 <",
+        TRUE ~ faixa_etaria
+      )
+    ][
+      ,
+      purrr::map(
+        .SD,
+        collapse::replace_NA,
+        value = 0
+      )
+    ]
+
+    data.table::setnames(
+      base_amb_idade,
+      old = "faixa_etaria",
+      new = "categoria"
+    )
+
+    data.table::fwrite(
+      base_amb_idade,
+      "output/base_amb_idade.csv",
+      append = TRUE
+    )
+
+    # estatísticas por sexo ----
+
+    base_amb_sexo <- base_amb[
+      ,
+      .(
+        tot_qt = collapse::fsum(qt_item_evento_informado),
+        tot_vl = collapse::fsum(vl_item_evento_informado)
+      ),
+      keyby = c("cd_procedimento", "termo", "sexo")
+    ][
+      ,
+      mean_vl := round(tot_vl / tot_qt, 2),
+      keyby = c("cd_procedimento", "termo", "sexo")
+    ][
+      ,
+      sexo := tidyfast::dt_case_when(
+        sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
+        TRUE ~ sexo
+      )
+    ][
+      ,
+      termo := stringr::str_to_upper(termo)
+    ][
+      ,
+      purrr::map(
+        .SD,
+        collapse::replace_NA,
+        value = 0
+      )
+    ]
+
+    data.table::setnames(
+      base_amb_sexo,
+      old = "sexo",
+      new = "categoria"
+    )
+
+    data.table::fwrite(
+      base_amb_sexo,
+      "output/base_amb_sexo.csv",
+      append = TRUE
+    )
+
+    purrr::walk(
+      c(temp1, temp2, csv_files[1], csv_files[2]),
+      ~ fs::file_delete(glue::glue("{.x}"))
+    )
+
+    gc()
+  }
+
+  pbapply::pblapply(
+    X = 1:12,
+    download_export,
+    cl = parallel::detectCores()
   )
 
-  csv_file <- unzip(
-    zipfile = temp,
-    exdir = tempdir
-  )
-
-  x <- data.table::fread(
-    input = csv_file,
-    encoding = "UTF-8",
-    select = stringr::str_to_upper(cols),
-    sep = ";",
-    dec = ","
-  ) |> janitor::clean_names()
-
-  x <- x[
-    ,
-    collapse::na_omit(x)
-  ][
-    ,
-    mes := mes
-  ]
-
-  purrr::walk(
-    c(temp, csv_file),
-    ~ fs::file_delete(glue::glue("{.x}"))
-  )
-
-  gc()
-
-  return(x)
 }
+
+# operador "not_in"
 
 `%not_in%` <- Negate(`%in%`)
 
@@ -109,8 +319,6 @@ unpack_read <- function(url, mes, cols) {
 # future::plan(multisession) # habilitando multithread
 
 # memory.size(max = 10^12)
-
-future::plan(multicore) # habilitando multithread
 
 # definindo termos da buscas no dados abertos -----------------------------
 
@@ -140,235 +348,36 @@ con <- duckdb::dbConnect(
   dbdir = "data/tabelas_tuss.duckdb"
 )
 
-tabelas <- tbl(con, "tabelas_tuss") |>
+tabelas <- dplyr::tbl(con, "tabelas_tuss") |>
   dplyr::collect()
 
 duckdb::dbDisconnect(con, shutdown = TRUE)
 
-# função de tratamento de dados ambulatoriais -----------------------------
+# exportando dados --------------------------------------------------------
 
-amb <- function(urls, index, tabelas) {
-
-  # download e leitura de dados ----
-
-  base_det <- furrr::future_map2_dfr(
-    urls[[1]][[index]]$url, urls[[1]][[index]]$mes,
-    ~ unpack_read(
-      url = .x,
-      mes = .y,
-      cols = c(
+purrr::walk(
+  .x = 1:27,
+  ~ tratamento_por_mes(
+    url_det = urls[[1]][[.x]],
+    url_cons = urls[[2]][[.x]],
+    cols = list(
+      det = c(
         "cd_procedimento",
         "id_evento_atencao_saude",
         "uf_prestador",
         "cd_tabela_referencia",
         "qt_item_evento_informado",
         "vl_item_evento_informado"
-      )
-    )
-  ) |> collapse::funique(cols = c("cd_procedimento", "id_evento_atencao_saude", "mes"))
-
-  base_cons <- furrr::future_map2_dfr(
-    urls[[2]][[index]]$url, urls[[2]][[index]]$mes,
-    ~ unpack_read(
-      url = .x,
-      mes = .y,
-      cols = c(
+      ),
+      cons = c(
         "id_evento_atencao_saude",
         "faixa_etaria",
         "sexo"
       )
-    )
-  ) |> collapse::funique(cols = c("id_evento_atencao_saude", "mes"))
-
-  data.table::setkey(base_det, id_evento_atencao_saude, mes)
-
-  data.table::setkey(base_cons,  id_evento_atencao_saude, mes)
-
-  base_amb <- data.table::merge.data.table(
-    base_det,
-    base_cons,
-    all.x = TRUE,
-    on = c("id_evento_atencao_saude", "mes")
-  )
-
-  # join por dicionário ----
-
-  base_amb <- base_amb[
-    cd_tabela_referencia != 0 &
-      cd_tabela_referencia != 9 &
-      cd_tabela_referencia != 98,
-    !"cd_tabela_referencia"
-  ][
-    cd_procedimento %in% tabelas$cd_procedimento
-  ] # filtrando tabelas e procedimentos sem informações
-
-  base_amb <- data.table::merge.data.table(
-    base_amb,
-    tabelas,
-    by = "cd_procedimento",
-    all.x = TRUE
-  )
-
-  # lista de procedimentos disponíveis ----
-
-  base_amb[
-    ,
-    collapse::funique(.SD, cols = "termo")
-  ][
-    ,
-    "termo"
-  ][
-    ,
-    termo := furrr::future_map_chr(
-      termo,
-      stringr::str_to_upper
-    )
-  ] |>
-    data.table::fwrite(
-      "output/termos_amb.csv",
-      append = TRUE)
-
-  # estatísticas por estado ----
-
-  base_amb_uf <- base_amb[
-    ,
-    .(
-      tot_qt = collapse::fsum(qt_item_evento_informado),
-      tot_vl = collapse::fsum(vl_item_evento_informado)
     ),
-    keyby = c("cd_procedimento", "termo", "uf_prestador")
-  ][
-    ,
-    mean_vl := round(tot_vl / tot_qt, 2),
-    keyby = c("cd_procedimento", "termo", "uf_prestador")
-  ][
-    ,
-    termo := furrr::future_map_chr(
-      termo,
-      stringr::str_to_upper
-    )
-  ][
-    ,
-    furrr::future_map(
-      .SD,
-      collapse::replace_NA,
-      value = 0
-    )
-  ]
-
-  data.table::setnames(
-    base_amb_uf,
-    old = "uf_prestador",
-    new = "categoria"
+    tabelas = tabelas
   )
-
-  data.table::fwrite(
-    base_amb_uf,
-    "output/base_amb_uf.csv",
-    append = TRUE
-  )
-
-  # estatísticas por faixa etária ----
-
-  base_amb_idade <- base_amb[
-    ,
-    .(
-      tot_qt = collapse::fsum(qt_item_evento_informado),
-      tot_vl = collapse::fsum(vl_item_evento_informado)
-    ),
-    keyby = c("cd_procedimento", "termo", "faixa_etaria")
-  ][
-    ,
-    mean_vl := round(tot_vl / tot_qt, 2),
-    keyby = c("cd_procedimento", "termo", "faixa_etaria")
-  ][
-    ,
-    termo := furrr::future_map_chr(
-      termo,
-      stringr::str_to_upper
-    )
-  ][
-    ,
-    faixa_etaria := tidyfast::dt_case_when(
-      faixa_etaria == "<1" ~ "< 1",
-      faixa_etaria == "80 ou mais" ~ "80 <",
-      TRUE ~ faixa_etaria
-    )
-  ][
-    ,
-    furrr::future_map(
-      .SD,
-      collapse::replace_NA,
-      value = 0
-    )
-  ]
-
-  data.table::setnames(
-    base_amb_idade,
-    old = "faixa_etaria",
-    new = "categoria"
-  )
-
-  data.table::fwrite(
-    base_amb_idade,
-    "output/base_amb_idade.csv",
-    append = TRUE
-  )
-
-  # estatísticas por sexo ----
-
-  base_amb_sexo <- base_amb[
-    ,
-    .(
-      tot_qt = collapse::fsum(qt_item_evento_informado),
-      tot_vl = collapse::fsum(vl_item_evento_informado)
-    ),
-    keyby = c("cd_procedimento", "termo", "sexo")
-  ][
-    ,
-    mean_vl := round(tot_vl / tot_qt, 2),
-    keyby = c("cd_procedimento", "termo", "sexo")
-  ][
-    ,
-    sexo := tidyfast::dt_case_when(
-      sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
-      TRUE ~ sexo
-    )
-  ][
-    ,
-    furrr::future_map(
-      .SD,
-      collapse::replace_NA,
-      value = 0
-    )
-  ]
-
-  data.table::setnames(
-    base_amb_sexo,
-    old = "sexo",
-    new = "categoria"
-  )
-
-  data.table::fwrite(
-    base_amb_sexo,
-    "output/base_amb_sexo.csv",
-    append = TRUE
-  )
-}
-
-# exportando dados --------------------------------------------------------
-
-for (i in 11:15) {
-  furrr::future_walk(
-    i,
-    ~ amb(urls, .x, tabelas)
-  )
-
-  print(i)
-
-  gc()
-
-}
+)
 
 # corrigindo exportações --------------------------------------------------
 
@@ -385,7 +394,7 @@ fix_db <- function(path, factors) {
     by = .(cd_procedimento, termo) # completando categorias faltantes
   ][
     ,
-    furrr::future_map(
+    purrr::map(
       .SD,
       collapse::replace_NA,
       value = 0
@@ -422,3 +431,4 @@ purrr::walk(
 readr::read_csv("output/termos_amb.csv") |>
   dplyr::distinct(termo) |>
   readr::write_csv("output/termos_amb.csv")
+

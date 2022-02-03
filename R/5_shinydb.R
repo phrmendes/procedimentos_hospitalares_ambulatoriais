@@ -90,7 +90,8 @@ import_shinydb(
 
 paths <- fs::dir_ls(
   path = "output/",
-  regexp = "amb") |> paste0()
+  regexp = "amb"
+) |> paste0()
 
 names <- paths |>
   stringr::str_remove_all("output/") |>

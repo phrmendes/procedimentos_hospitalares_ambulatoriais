@@ -42,7 +42,8 @@ tabelas <- bind(
 
 con <- duckdb::dbConnect(
   duckdb::duckdb(),
-  dbdir = "data/tabelas_tuss.duckdb")
+  dbdir = "data/tabelas_tuss.duckdb"
+)
 
 dplyr::copy_to(
   dest = con,

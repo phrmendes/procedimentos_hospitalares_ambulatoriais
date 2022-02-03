@@ -42,11 +42,11 @@ urls <- purrr::map(
 # download e escrita em database ------------------------------------------
 
 pbapply::pbmapply(
-  function(x, y, z) {
+  FUN = function(x, y, z) {
     unpack_write_db(
       url = x,
       mes = y,
-      dic = tuss,
+      dic = z,
       cols = c(
         "cd_procedimento",
         "id_evento_atencao_saude",
@@ -71,11 +71,11 @@ pbapply::pbmapply(
 )
 
 pbapply::pbmapply(
-  function(x, y, z) {
+  FUN = function(x, y, z) {
     unpack_write_db(
       url = x,
       mes = y,
-      dic = tuss,
+      dic = z,
       cols = c(
         "id_evento_atencao_saude",
         "faixa_etaria",
@@ -176,7 +176,8 @@ con <- duckdb::dbConnect(
 
 DBI::dbExecute(
   conn = con,
-  statement = "CREATE SCHEMA pg_catalog")
+  statement = "CREATE SCHEMA pg_catalog"
+)
 
 duckdb::duckdb_read_csv(
   conn = con,
@@ -187,7 +188,8 @@ duckdb::duckdb_read_csv(
 
 DBI::dbExecute(
   conn = con,
-  statement = "CREATE INDEX idx ON proc_hosp (id_evento_atencao_saude, cd_procedimento, faixa_etaria, sexo, uf_prestador)")
+  statement = "CREATE INDEX idx ON proc_hosp (id_evento_atencao_saude, cd_procedimento, faixa_etaria, sexo, uf_prestador)"
+)
 
 fs::file_delete("data/proc.csv")
 

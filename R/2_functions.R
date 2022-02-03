@@ -242,7 +242,7 @@ import_shinydb <- function(x, complete_vars, db_name, table) {
 
 # função que cria queries para renomear colunas ---------------------------
 
-build_queries <- function(tbl, name1, name2){
+build_queries <- function(tbl, name1, name2) {
   x <- tibble::tibble(
     a = "ALTER TABLE",
     b = glue::glue("{tbl}"),
