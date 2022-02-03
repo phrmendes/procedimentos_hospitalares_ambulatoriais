@@ -129,7 +129,7 @@ load_data <- function(x) {
 
 # função de tratamento da database do shinyapp ----------------------------
 
-import_shinydb <- function(x, complete_vars, db_name, table) {
+import_shinydb <- function(x, complete_vars, db_name) {
   con <- duckdb::dbConnect(
     duckdb::duckdb(),
     dbdir = "data/proc_hosp.duckdb"
@@ -140,7 +140,7 @@ import_shinydb <- function(x, complete_vars, db_name, table) {
     dbdir = "output/shinydb.duckdb"
   )
 
-  df <- dplyr::tbl(con, paste0(table))
+  df <- dplyr::tbl(con, "proc_hosp")
 
   group_by_var <- as.symbol(glue::glue("{x}"))
 

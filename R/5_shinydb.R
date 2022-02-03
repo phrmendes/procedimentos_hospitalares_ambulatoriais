@@ -2,22 +2,12 @@
 #### CRIAÇÃO DE DATABASE PARA SHINY APP ####
 ############################################
 
-# funções e bibliotecas ---------------------------------------------------
+# funções, bibliotecas e parâmetros ---------------------------------------
 
 source("R/1_libraries.R")
 source("R/2_functions.R")
 
-# conexões ----------------------------------------------------------------
-
-shinydb <- duckdb::dbConnect(
-  duckdb::duckdb(),
-  dbdir = "output/shinydb.duckdb"
-)
-
-con <- duckdb::dbConnect(
-  duckdb::duckdb(),
-  dbdir = "data/proc_hosp.duckdb"
-)
+future::plan(multisession) # multiprocessamento
 
 # shapefile de estados ----------------------------------------------------
 
@@ -30,6 +20,16 @@ geobr::read_state(
   saveRDS(file = "output/geom_ufs.rds")
 
 # databases hospitalares --------------------------------------------------
+
+shinydb <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "output/shinydb.duckdb"
+)
+
+con <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "data/proc_hosp.duckdb"
+)
 
 # lista de procedimentos disponíveis
 
@@ -55,6 +55,11 @@ duckdb::dbWriteTable(
   temporary = FALSE
 )
 
+purrr::walk(
+  c(con, shinydb),
+  ~ duckdb::dbDisconnect(.x, shutdown = TRUE)
+)
+
 # estatísticas por estado
 
 estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
@@ -62,8 +67,7 @@ estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "
 import_shinydb(
   x = "uf_prestador",
   complete_vars = estados,
-  db_name = "base_hosp_uf",
-  table = "proc_hosp"
+  db_name = "base_hosp_uf"
 )
 
 # estatísticas por faixa etária
@@ -73,8 +77,7 @@ faixas <- c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a
 import_shinydb(
   x = "faixa_etaria",
   complete_vars = faixas,
-  db_name = "base_hosp_idade",
-  table = "proc_hosp"
+  db_name = "base_hosp_idade"
 )
 
 # estatísticas por sexo
@@ -82,11 +85,15 @@ import_shinydb(
 import_shinydb(
   x = "sexo",
   complete_vars = c("Masculino", "Feminino", "N. I."),
-  db_name = "base_hosp_sexo",
-  table = "proc_hosp"
+  db_name = "base_hosp_sexo"
 )
 
 # databases ambulatoriais -------------------------------------------------
+
+shinydb <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "output/shinydb.duckdb"
+)
 
 paths <- fs::dir_ls(
   path = "output/",
@@ -111,8 +118,14 @@ paths |>
     fs::file_delete
   )
 
+duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
 # renomeando colunas ------------------------------------------------------
+
+shinydb <- duckdb::dbConnect(
+  duckdb::duckdb(),
+  dbdir = "output/shinydb.duckdb"
+)
 
 dbs <- duckdb::dbListTables(shinydb) |>
   stringr::str_subset("base")
@@ -131,9 +144,4 @@ purrr::walk(
   ~ DBI::dbExecute(conn = shinydb, statement = .x)
 )
 
-# desconectando
-
-purrr::walk(
-  c(con, shinydb),
-  ~ duckdb::dbDisconnect(.x, shutdown = TRUE)
-)
+duckdb::dbDisconnect(shinydb, shutdown = TRUE)

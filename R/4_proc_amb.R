@@ -383,7 +383,7 @@ purrr::walk(
 
 fix_db <- function(path, factors) {
   df <- readr::read_csv(path) |>
-    dplyr::distinct(cd_procedimento, termo, categoria) |>
+    dplyr::distinct(cd_procedimento, termo, categoria, .keep_all = TRUE) |>
     data.table::as.data.table()
 
   df <- df[
@@ -431,4 +431,3 @@ purrr::walk(
 readr::read_csv("output/termos_amb.csv") |>
   dplyr::distinct(termo) |>
   readr::write_csv("output/termos_amb.csv")
-
