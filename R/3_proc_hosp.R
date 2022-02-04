@@ -114,6 +114,18 @@ duckdb::dbWriteTable(
   temporary = FALSE
 )
 
+# criando índices para join
+
+DBI::dbExecute(
+  conn = con,
+  statement = glue::glue("CREATE INDEX idx1 ON base_det (id_evento_atencao_saude)")
+)
+
+DBI::dbExecute(
+  conn = con,
+  statement = glue::glue("CREATE INDEX idx2 ON base_cons (id_evento_atencao_saude)")
+)
+
 # joins
 
 subquery <- glue::glue_sql(

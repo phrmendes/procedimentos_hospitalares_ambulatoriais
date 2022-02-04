@@ -65,12 +65,15 @@ unpack_write_db <- function(url, mes, dic, cols, name, indexes) {
   ][
     ,
     id_evento_atencao_saude := as.character(id_evento_atencao_saude)
-  ] |>
-    collapse::funique(cols = c("id_evento_atencao_saude", "mes"))
+  ]
 
-  if (c("cd_tabela_referencia") %in% names(x) == TRUE) x <- x[!(cd_tabela_referencia %in% c(0, 9, 98))]
+  if ("cd_procedimento" %in% names(x) == TRUE){
+    x <- collapse::funique(x, cols = c("cd_procedimento", "id_evento_atencao_saude", "mes"))
+  } else {
+    x <- collapse::funique(x, cols = c("id_evento_atencao_saude", "mes"))
+  }
 
-  if (c("cd_procedimento") %in% names(x) == TRUE) x <- x[cd_procedimento %in% dic$cd_procedimento]
+  if ("cd_tabela_referencia" %in% names(x) == TRUE) x <- x[!(cd_tabela_referencia %in% c(0, 9, 98)), !"cd_tabela_referencia"]
 
   con <- duckdb::dbConnect(
     duckdb::duckdb(),

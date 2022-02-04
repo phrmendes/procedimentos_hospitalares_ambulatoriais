@@ -72,7 +72,7 @@ import_shinydb(
 
 # estatísticas por faixa etária
 
-faixas <- c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a 9", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I.")
+faixas <- c("1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I.")
 
 import_shinydb(
   x = "faixa_etaria",

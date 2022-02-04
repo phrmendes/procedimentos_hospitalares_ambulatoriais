@@ -126,26 +126,30 @@ tratamento_por_mes <- function(url_det, url_cons, cols, tabelas) {
       ~ data.table::setkey(.x, id_evento_atencao_saude, mes)
     )
 
+    if ("cd_procedimento" %in% names(x) == TRUE){
+      x <- purrr::walk(
+        x,
+        ~ collapse::funique(.x, cols = c("cd_procedimento", "id_evento_atencao_saude", "mes"))
+      )
+    } else {
+      x <- purrr::walk(
+        x,
+        ~ collapse::funique(.x, cols = c("id_evento_atencao_saude", "mes"))
+      )
+    }
+
     base_amb <- data.table::merge.data.table(
       x[[1]],
       x[[2]],
       all.x = TRUE,
       on = c("id_evento_atencao_saude", "mes")
-    ) |> collapse::funique(c(
-      "id_evento_atencao_saude",
-      "cd_procedimento",
-      "mes"))
+    )
+
+    if ("cd_tabela_referencia" %in% names(x) == TRUE) x <- x[!(cd_tabela_referencia %in% c(0, 9, 98))]
 
     # join por dicionário
 
-    base_amb <- base_amb[
-      cd_tabela_referencia != 0 &
-        cd_tabela_referencia != 9 &
-        cd_tabela_referencia != 98,
-      !"cd_tabela_referencia"
-    ][
-      cd_procedimento %in% tabelas$cd_procedimento
-    ] # filtrando tabelas e procedimentos sem informações
+    base_amb <- base_amb[!(cd_tabela_referencia %in% c(0, 9, 98)), !"cd_tabela_referencia"]
 
     base_amb <- data.table::merge.data.table(
       base_amb,
@@ -302,6 +306,16 @@ tratamento_por_mes <- function(url_det, url_cons, cols, tabelas) {
     gc()
   }
 
+  # for (i in 1:12) {
+  #
+  #   pbapply::pblapply(
+  #     X = i,
+  #     download_export,
+  #     cl = parallel::detectCores()
+  #   )
+  #
+  # }
+
   pbapply::pblapply(
     X = 1:12,
     download_export,
@@ -399,6 +413,8 @@ fix_db <- function(path, factors) {
       collapse::replace_NA,
       value = 0
     )
+  ][
+    termo != "0"
   ]
 
   data.table::fwrite(
@@ -410,7 +426,7 @@ fix_db <- function(path, factors) {
 files <- as.character(fs::dir_ls(path = "output/", regexp = "._amb_."))
 
 factors <- list(
-  idade = c("1 a 4", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "5 a 9", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I."),
+  idade = c("1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I."),
   sexo = c("Masculino", "Feminino", "N. I."),
   uf = estados
 )
