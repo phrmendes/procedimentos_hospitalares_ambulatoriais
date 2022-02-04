@@ -21,6 +21,7 @@ pacman::p_load(
   sf,
   DBI,
   duckdb,
+  listviewer,
   install = F
 )
 
@@ -35,20 +36,20 @@ shinydb <- duckdb::dbConnect(
   dbdir = "output/shinydb.duckdb"
 )
 
-selectize_vars <- list(
+vars_shiny <- list(
   proc_hosp = dplyr::tbl(shinydb, "termos_hosp") |>
     dplyr::collect() |>
+    dplyr::arrange(termo) |>
     purrr::flatten_chr(),
   proc_amb = dplyr::tbl(shinydb, "termos_amb") |>
     dplyr::collect() |>
+    dplyr::arrange(termo) |>
     purrr::flatten_chr(),
   categoria = c("Faixa etária", "Sexo", "UF"),
   estatistica = c("Quantidade total", "Valor total", "Valor médio")
 )
 
 duckdb::dbDisconnect(shinydb, shutdown = TRUE)
-
-ufs <- readRDS(here::here("output/geom_ufs.rds"))
 
 # shiny -------------------------------------------------------------------
 
@@ -99,7 +100,7 @@ body <- shinydashboard::dashboardBody(
           collapsible = TRUE,
           shiny::selectizeInput(
             inputId = "procedimentos_hosp",
-            label = "Selecione um procedimento",
+            label = "Selecione um procedimento hospitalar",
             selected = NULL,
             choices = NULL
           ),
@@ -107,13 +108,13 @@ body <- shinydashboard::dashboardBody(
             inputId = "categoria",
             label = "Selecione uma categoria",
             selected = NULL,
-            choices = selectize_vars$categoria
+            choices = vars_shiny$categoria
           ),
           shiny::selectInput(
             inputId = "estatistica",
             label = "Selecione uma estatística",
             selected = NULL,
-            choices = selectize_vars$estatistica
+            choices = vars_shiny$estatistica
           )
         ),
         # gráficos ------------------------------ #
@@ -147,7 +148,7 @@ body <- shinydashboard::dashboardBody(
           collapsible = TRUE,
           shiny::selectizeInput(
             inputId = "procedimentos_amb",
-            label = "Selecione um procedimento",
+            label = "Selecione um procedimento ambulatorial",
             selected = NULL,
             choices = NULL
           ),
@@ -155,13 +156,13 @@ body <- shinydashboard::dashboardBody(
             inputId = "categoria",
             label = "Selecione uma categoria",
             selected = NULL,
-            choices = selectize_vars$categoria
+            choices = vars_shiny$categoria
           ),
           shiny::selectInput(
             inputId = "estatistica",
             label = "Selecione uma estatística",
             selected = NULL,
-            choices = selectize_vars$estatistica
+            choices = vars_shiny$estatistica
           )
         ),
         # gráficos ------------------------------ #
@@ -190,11 +191,11 @@ ui <- shinydashboard::dashboardPage(
   header, sidebar, body
 )
 
-input <- list(
-  categoria = "UF",
-  procedimentos = "CONSULTA EM PRONTO SOCORRO",
-  estatistica = "Quantidade total"
-)
+# input <- list(
+#   categoria = "UF",
+#   procedimentos_amb = "ABAIXAMENTO MIOTENDINOSO NO ANTEBRAÇO",
+#   estatistica = "Quantidade total"
+# )
 
 server <- function(input, output, session) {
 
@@ -220,7 +221,7 @@ server <- function(input, output, session) {
     duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
     dados <- dados |>
-      dplyr::filter(termo == input$procedimentos) |>
+      dplyr::filter(termo == input$procedimentos_hosp) |>
       dplyr::select(categoria, dplyr::starts_with(glue::glue("{input$estatistica}")))
 
     plot_bar <- dados |>
@@ -255,20 +256,20 @@ server <- function(input, output, session) {
       dbdir = "output/shinydb.duckdb"
     )
 
+    ufs <- readRDS(here::here("output/geom_ufs.rds"))
+
     dados <- dplyr::tbl(shinydb, "base_hosp_uf") |>
       dplyr::collect()
 
     duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
     plot_map <- dados |>
-      dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>
-      dplyr::select(categoria, tot_qt) |>
-      dplyr::rename(`Quantidade total` = tot_qt) |>
+      dplyr::filter(termo == input$procedimentos_hosp) |>
+      dplyr::select(categoria, dplyr::starts_with(glue::glue("{input$estatistica}"))) |>
       dplyr::left_join(
         ufs,
         by = "categoria"
       ) |>
-      # dplyr::filter(termo == "ANESTESIAS") |>
       ggplot() +
       geom_sf(
         aes(
@@ -314,13 +315,14 @@ server <- function(input, output, session) {
         dplyr::collect()
     } else {
       dados <- dplyr::tbl(shinydb, "base_amb_idade") |>
-        dplyr::collect()
+        dplyr::collect() |>
+        dplyr::filter(termo != "CONSULTA EM PRONTO10101012")
     }
 
     duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
     dados <- dados |>
-      dplyr::filter(termo == input$procedimentos) |>
+      dplyr::filter(termo == input$procedimentos_amb) |>
       dplyr::select(categoria, dplyr::starts_with(glue::glue("{input$estatistica}")))
 
     plot_bar <- dados |>
@@ -355,20 +357,20 @@ server <- function(input, output, session) {
       dbdir = "output/shinydb.duckdb"
     )
 
+    ufs <- readRDS(here::here("output/geom_ufs.rds"))
+
     dados <- dplyr::tbl(shinydb, "base_amb_uf") |>
       dplyr::collect()
 
     duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
     plot_map <- dados |>
-      dplyr::filter(termo == glue::glue("{input$procedimentos}")) |>
-      dplyr::select(categoria, tot_qt) |>
-      dplyr::rename(`Quantidade total` = tot_qt) |>
+      dplyr::filter(termo == input$procedimentos_amb) |>
+      dplyr::select(categoria, dplyr::starts_with(glue::glue("{input$estatistica}"))) |>
       dplyr::left_join(
         ufs,
         by = "categoria"
       ) |>
-      # dplyr::filter(termo == "ANESTESIAS") |>
       ggplot() +
       geom_sf(
         aes(
@@ -403,14 +405,16 @@ server <- function(input, output, session) {
   shiny::updateSelectizeInput(
     session,
     inputId = "procedimentos_hosp",
-    choices = selectize_vars$proc_hosp,
+    choices = vars_shiny$proc_hosp,
+    selected = NULL,
     server = TRUE
   )
 
   shiny::updateSelectizeInput(
     session,
     inputId = "procedimentos_amb",
-    choices = selectize_vars$proc_amb,
+    choices = vars_shiny$proc_amb,
+    selected = NULL,
     server = TRUE
   ) # opções server-side
 }
