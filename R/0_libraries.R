@@ -1,0 +1,33 @@
+if (!require("pacman")) install.packages("pacman")
+
+pacman::p_load(
+  data.table,
+  collapse,
+  tidyverse,
+  glue,
+  tidyfast,
+  usethis,
+  future,
+  furrr,
+  pbapply,
+  janitor,
+  styler,
+  fs,
+  arrow,
+  shiny,
+  shinydashboard,
+  plotly,
+  here,
+  ggthemes,
+  dashboardthemes,
+  shinydashboardPlus,
+  geobr,
+  sf,
+  MetBrewer,
+  memoise,
+  duckdb,
+  DBI,
+  miniUI,
+  parallel,
+  install = F
+)
