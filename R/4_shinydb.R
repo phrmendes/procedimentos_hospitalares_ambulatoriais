@@ -4,10 +4,10 @@
 
 # funções, bibliotecas e parâmetros ---------------------------------------
 
-source("R/1_libraries.R")
-source("R/2_functions.R")
+source("R/0_libraries.R")
+source("R/0_functions.R")
 
-future::plan(multisession) # multiprocessamento
+future::plan(multisession)
 
 # shapefile de estados ----------------------------------------------------
 
@@ -21,19 +21,9 @@ geobr::read_state(
 
 # databases hospitalares --------------------------------------------------
 
-shinydb <- duckdb::dbConnect(
-  duckdb::duckdb(),
-  dbdir = "output/shinydb.duckdb"
-)
-
-con <- duckdb::dbConnect(
-  duckdb::duckdb(),
-  dbdir = "data/proc_hosp.duckdb"
-)
-
 # lista de procedimentos disponíveis
 
-termos_hosp <- dplyr::tbl(con, "proc_hosp") |>
+termos_hosp <- arrow::open_dataset("data/proc_hosp_db/") |>
   dplyr::select(termo) |>
   dplyr::distinct() |>
   dplyr::collect() |>
@@ -47,101 +37,82 @@ termos_hosp[
   )
 ]
 
-duckdb::dbWriteTable(
-  conn = shinydb,
-  value = termos_hosp,
-  name = "termos_hosp",
-  overwrite = TRUE,
-  temporary = FALSE
+arrow::write_parquet(termos_hosp, "output/termos_hosp.parquet")
+
+# cálculo de estatísticas
+
+parametros <- list(
+  estados = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
+  faixas = c("1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I."),
+  sexos = c("Masculino", "Feminino", "N. I.")
 )
 
-purrr::walk(
-  c(con, shinydb),
-  ~ duckdb::dbDisconnect(.x, shutdown = TRUE)
+estatisticas <- list(
+  cols = c("uf_prestador", "faixa_etaria", "sexo"),
+  names = paste0("base_hosp_", c("uf", "idade", "sexo"))
 )
 
-# estatísticas por estado
+pbapply::pblapply(
+  1:3,
+  function(i) {
+      export_parquet(
+      x = estatisticas$cols[i],
+      complete_vars = parametros[[i]],
+      db_name = "proc_hosp_db",
+      export_name = estatisticas$names[i]
+      )
 
-estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+    gc()
 
-import_shinydb(
-  x = "uf_prestador",
-  complete_vars = estados,
-  db_name = "base_hosp_uf"
-)
-
-# estatísticas por faixa etária
-
-faixas <- c("1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I.")
-
-import_shinydb(
-  x = "faixa_etaria",
-  complete_vars = faixas,
-  db_name = "base_hosp_idade"
-)
-
-# estatísticas por sexo
-
-import_shinydb(
-  x = "sexo",
-  complete_vars = c("Masculino", "Feminino", "N. I."),
-  db_name = "base_hosp_sexo"
+    return("Importado!")
+  }
 )
 
 # databases ambulatoriais -------------------------------------------------
 
-shinydb <- duckdb::dbConnect(
-  duckdb::duckdb(),
-  dbdir = "output/shinydb.duckdb"
-)
+# lista de procedimentos disponíveis
 
-paths <- fs::dir_ls(
-  path = "output/",
-  regexp = "amb"
-) |> paste0()
+termos_amb <- arrow::open_dataset("data/proc_amb_db/") |>
+  dplyr::select(termo) |>
+  dplyr::distinct() |>
+  dplyr::collect() |>
+  data.table::as.data.table()
 
-names <- paths |>
-  stringr::str_remove_all("output/") |>
-  stringr::str_remove_all("\\.csv")
-
-purrr::walk2(
-  paths, names,
-  ~ duckdb::duckdb_read_csv(
-    conn = shinydb,
-    files = .x,
-    name = .y
+termos_amb[
+  ,
+  termo := furrr::future_map_chr(
+    termo,
+    stringr::str_to_upper
   )
+]
+
+arrow::write_parquet(termos_amb, "output/termos_amb.parquet")
+
+# cálculo de estatísticas
+
+parametros <- list(
+  estados = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
+  faixas = c("1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I."),
+  sexos = c("Masculino", "Feminino", "N. I.")
 )
 
-paths |>
-  purrr::walk(
-    fs::file_delete
-  )
-
-duckdb::dbDisconnect(shinydb, shutdown = TRUE)
-
-# renomeando colunas ------------------------------------------------------
-
-shinydb <- duckdb::dbConnect(
-  duckdb::duckdb(),
-  dbdir = "output/shinydb.duckdb"
+estatisticas <- list(
+  cols = c("uf_prestador", "faixa_etaria", "sexo"),
+  names = paste0("base_amb_", c("uf", "idade", "sexo"))
 )
 
-dbs <- duckdb::dbListTables(shinydb) |>
-  stringr::str_subset("base")
+pbapply::pblapply(
+  1:3,
+  function(i) {
+    export_parquet(
+      x = estatisticas$cols[i],
+      complete_vars = parametros[[i]],
+      db_name = "proc_amb_db",
+      export_name = estatisticas$names[i]
+    )
 
-old_name <- c("tot_qt", "tot_vl", "mean_vl")
+    gc()
 
-new_name <- c("Quantidade total", "Valor total", "Valor médio")
-
-queries <- purrr::map_dfr(
-  dbs,
-  ~ build_queries(.x, old_name, new_name)
-) |> purrr::flatten_chr()
-
-purrr::walk(
-  queries,
-  ~ DBI::dbExecute(conn = shinydb, statement = .x)
+    return("Importado!")
+  }
 )
-
-duckdb::dbDisconnect(shinydb, shutdown = TRUE)

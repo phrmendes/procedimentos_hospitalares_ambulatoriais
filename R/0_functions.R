@@ -61,22 +61,21 @@ unpack_write_parquet <- function(url, mes_url, cols, indexes) {
     collapse::na_omit(x)
   ][
     ,
-    ':=' (
+    ":="(
       mes = mes_url,
       id_evento_atencao_saude = as.character(id_evento_atencao_saude))
   ]
 
-  if ("cd_procedimento" %in% names(x) == TRUE){
+  if ("cd_procedimento" %in% names(x) == TRUE) {
     x <- collapse::funique(x, cols = c("id_evento_atencao_saude", "cd_procedimento", "mes"))
 
     x[
       ,
-      ':=' (
+      ":="(
         qt_item_evento_informado = as.double(qt_item_evento_informado),
         vl_item_evento_informado = as.double(vl_item_evento_informado)
       )
     ]
-
   } else {
     x <- collapse::funique(x, cols = c("id_evento_atencao_saude", "mes"))
   }
@@ -84,8 +83,6 @@ unpack_write_parquet <- function(url, mes_url, cols, indexes) {
   if ("cd_tabela_referencia" %in% names(x) == TRUE) x <- x[!(cd_tabela_referencia %in% c(0, 9, 98)), !"cd_tabela_referencia"]
 
   name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)") # match do nome entre a UF e o .zip no final da URL
-
-  if(!fs::dir_exists("data/parquet/")) fs::dir_create("data/parquet/")
 
   arrow::write_parquet(
     x = x,
@@ -98,8 +95,39 @@ unpack_write_parquet <- function(url, mes_url, cols, indexes) {
   )
 
   gc()
+}
 
-  return("importado")
+
+# função para lidar com a base gigantesca de dados ambulatoriais ----------
+
+parquet_amb <- function(path_1, path_2, termos) {
+  db_1 <- arrow::read_parquet(path_1) |>
+    data.table::as.data.table(key = c("id_evento_atencao_saude", "mes"))
+
+  db_2 <- arrow::read_parquet(path_2) |>
+    data.table::as.data.table(key = c("id_evento_atencao_saude", "mes"))
+
+  termos <- termos |>
+    data.table::as.data.table(key = "cd_procedimento")
+
+  db_3 <- data.table::merge.data.table(
+    db_1, db_2,
+    by = c("id_evento_atencao_saude", "mes"),
+    all.x = TRUE
+  )
+
+  data.table::setkey(db_3, "cd_procedimento")
+
+  db_3 <- db_3[
+    termos,
+    on = "cd_procedimento"
+  ]
+
+  name <- stringr::str_extract(path_1, "(?<=/parquet/)(.*)(?=\\_AMB_DET.parquet$)")
+
+  arrow::write_parquet(db_3, glue::glue("data/proc_amb_db/{name}.parquet"))
+
+  gc()
 }
 
 # função que cria dummies que indicam as tabelas base ---------------------
@@ -132,23 +160,13 @@ load_data <- function(x) {
 
 # função de tratamento da database do shinyapp ----------------------------
 
-import_shinydb <- function(x, complete_vars, db_name) {
-  con <- duckdb::dbConnect(
-    duckdb::duckdb(),
-    dbdir = "data/proc_hosp.duckdb"
-  )
+export_parquet <- function(x, complete_vars, db_name, export_name) {
+  df <- arrow::open_dataset(glue::glue("data/{db_name}"))
 
-  shinydb <- duckdb::dbConnect(
-    duckdb::duckdb(),
-    dbdir = "output/shinydb.duckdb"
-  )
-
-  df <- dplyr::tbl(con, "proc_hosp")
-
-  group_by_var <- as.symbol(glue::glue("{x}"))
+  group_by_var <- as.symbol(x)
 
   y <- df |>
-    dplyr::group_by(cd_procedimento, termo, group_by_var) |>
+    dplyr::group_by(cd_procedimento, termo, {{ group_by_var }}) |>
     dplyr::summarise(
       tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
       tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
@@ -227,45 +245,7 @@ import_shinydb <- function(x, complete_vars, db_name) {
     new = "categoria"
   )
 
-  duckdb::dbWriteTable(
-    conn = shinydb,
-    value = y,
-    name = db_name,
-    overwrite = TRUE,
-    temporary = FALSE
-  )
+  arrow::write_parquet(y, glue::glue("output/{export_name}.parquet"))
 
-  purrr::walk(
-    c(con, shinydb),
-    ~ duckdb::dbDisconnect(.x, shutdown = TRUE)
-  )
-
-  return("Importado!")
-}
-
-# função que cria queries para renomear colunas ---------------------------
-
-build_queries <- function(tbl, name1, name2) {
-  x <- tibble::tibble(
-    a = "ALTER TABLE",
-    b = glue::glue("{tbl}"),
-    c = "RENAME COLUMN"
-  ) |>
-    dplyr::group_by(a, b, c) |>
-    tidyr::nest() |>
-    dplyr::mutate(
-      data = purrr::map(
-        data,
-        ~ tibble::tibble(
-          d = old_name,
-          e = "TO",
-          f = glue::glue('"{new_name}"')
-        ) |>
-          tidyr::unite("d", d:f, sep = " ")
-      )
-    ) |>
-    tidyr::unnest(cols = c(data)) |>
-    tidyr::unite("queries", a:d, sep = " ")
-
-  return(x)
+  gc()
 }
