@@ -1,12 +1,10 @@
-############################################
-#### SHINY - PROCEDIMENTOS HOSPITALARES ####
-############################################
+# ---------------------------------------------------------- #
+# --- SHINY - PROCEDIMENTOS HOSPITALARES E AMBULATORIAIS --- #
+# ---------------------------------------------------------- #
 
 # bibliotecas, funções e opções -------------------------------------------
 
 if (!require("pacman")) install.packages("pacman")
-
-library("pacman")
 
 pacman::p_load(
   tidyverse,
@@ -21,35 +19,34 @@ pacman::p_load(
   sf,
   DBI,
   duckdb,
-  listviewer,
+  arrow,
   install = F
 )
-
-# install.packages("sf", configure.args = "--with-proj-lib=/usr/local/lib/")
 
 options(scipen = 999)
 
 # variáveis ---------------------------------------------------------------
 
-shinydb <- duckdb::dbConnect(
-  duckdb::duckdb(),
-  dbdir = "output/shinydb.duckdb"
+shinydb <- purrr::map(
+  fs::dir_ls("output/", regexp = "base(.*)parquet"),
+  arrow::read_parquet
 )
 
+names(shinydb) <- names(shinydb) |>
+  stringr::str_extract("(?<=output/)(.*)(?=.parquet)")
+
 vars_shiny <- list(
-  proc_hosp = dplyr::tbl(shinydb, "termos_hosp") |>
+  proc_hosp = arrow::read_parquet("output/termos_hosp.parquet") |>
     dplyr::collect() |>
     dplyr::arrange(termo) |>
     purrr::flatten_chr(),
-  proc_amb = dplyr::tbl(shinydb, "termos_amb") |>
+  proc_amb = arrow::read_parquet("output/termos_amb.parquet") |>
     dplyr::collect() |>
     dplyr::arrange(termo) |>
     purrr::flatten_chr(),
   categoria = c("Faixa etária", "Sexo", "UF"),
   estatistica = c("Quantidade total", "Valor total", "Valor médio")
 )
-
-duckdb::dbDisconnect(shinydb, shutdown = TRUE)
 
 # shiny -------------------------------------------------------------------
 
@@ -190,12 +187,6 @@ ui <- shinydashboard::dashboardPage(
   title = "Abramge", # título da aba do dashboard
   header, sidebar, body
 )
-
-# input <- list(
-#   categoria = "UF",
-#   procedimentos_amb = "ABAIXAMENTO MIOTENDINOSO NO ANTEBRAÇO",
-#   estatistica = "Quantidade total"
-# )
 
 server <- function(input, output, session) {
 
