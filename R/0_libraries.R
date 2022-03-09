@@ -1,4 +1,9 @@
-if (!require("pacman")) install.packages("pacman")
+# ------------------- #
+# --- BIBLIOTECAS --- #
+# ------------------- #
+
+
+if (!require("pacman")) require(install.packages("pacman"))
 
 # install.packages("arrow", repos = "https://packagemanager.rstudio.com/all/__linux__/focal/latest") # instalação rápida do arrow
 
@@ -19,7 +24,6 @@ pacman::p_load(
   shiny,
   shinydashboard,
   plotly,
-  here, # excluir
   ggthemes,
   dashboardthemes, # excluir
   shinydashboardPlus, # excluir
@@ -27,7 +31,6 @@ pacman::p_load(
   sf,
   MetBrewer,
   memoise,
-  duckdb, # excluir
   DBI,
   miniUI,
   parallel,

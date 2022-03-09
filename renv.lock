@@ -490,16 +490,6 @@
         "vctrs"
       ]
     },
-    "duckdb": {
-      "Package": "duckdb",
-      "Version": "0.3.1-1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "209719c79ec850e02212a54c23995b9d",
-      "Requirements": [
-        "DBI"
-      ]
-    },
     "e1071": {
       "Package": "e1071",
       "Version": "1.7-9",
@@ -825,16 +815,6 @@
         "vctrs"
       ]
     },
-    "here": {
-      "Package": "here",
-      "Version": "1.0.1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "24b224366f9c2e7534d2344d10d59211",
-      "Requirements": [
-        "rprojroot"
-      ]
-    },
     "highr": {
       "Package": "highr",
       "Version": "0.9",
@@ -1043,18 +1023,6 @@
       "Repository": "CRAN",
       "Hash": "0bde42ee282efb18c7c4e63822f5b4f7",
       "Requirements": []
-    },
-    "listviewer": {
-      "Package": "listviewer",
-      "Version": "3.0.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "99ae030cd035dbcd18623179891fadb2",
-      "Requirements": [
-        "htmltools",
-        "htmlwidgets",
-        "shiny"
-      ]
     },
     "lubridate": {
       "Package": "lubridate",

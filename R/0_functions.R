@@ -1,3 +1,7 @@
+# --------------- #
+# --- FUNÇÕES --- #
+# --------------- #
+
 # função para seleção de bases por ano, estado, mês e período -------------
 
 base <- function(ano, estado, mes, base, url, proc) {
@@ -244,6 +248,23 @@ export_parquet <- function(x, complete_vars, db_name, export_name) {
     old = paste0(x),
     new = "categoria"
   )
+
+  termos_nulos <- y[
+    ,
+    lapply(.SD, sum),
+    .SDcols = c("tot_qt", "tot_vl", "mean_vl"),
+    by = .(termo)
+  ][
+    ,
+    .(tot = sum(tot_qt, tot_vl, mean_vl)),
+    by = .(termo)
+  ][
+    tot == 0,
+    "termo"
+  ] |>
+    purrr::flatten_chr()
+
+  y <- y[termo %not_in% termos_nulos]
 
   arrow::write_parquet(y, glue::glue("output/{export_name}.parquet"))
 
