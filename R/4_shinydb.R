@@ -71,12 +71,19 @@ pbapply::pblapply(
   }
 )
 
-# lista de procedimentos disponíveis --------------------------------------
+# procedimentos excedentes e lista de procedimentos disponíveis -----------
 
 shinydb <- purrr::map(
   fs::dir_ls("output/", regexp = "base(.*)parquet"),
-  ~ arrow::read_parquet(.x)
+  arrow::read_parquet
 )
+
+x <- c(2, 3, 5, 6)
+y <- c(1, 1, 4, 4)
+
+for (i in 1:4) {
+  shinydb[[x[i]]] <- shinydb[[x[i]]] |> dplyr::semi_join(shinydb[[y[i]]], by = "cd_procedimento")
+} # filtra procedimentos excedentes em outras bases
 
 shinydb[[3]] |>
   dplyr::distinct(termo) |>
@@ -85,3 +92,9 @@ shinydb[[3]] |>
 shinydb[[6]] |>
   dplyr::distinct(termo) |>
   arrow::write_parquet("output/termos_hosp.parquet")
+
+purrr::walk2(
+  .x = shinydb,
+  .y = names(shinydb),
+  ~ arrow::write_parquet(.x, glue::glue("{.y}"))
+)

@@ -4,28 +4,21 @@
 
 # bibliotecas, funções e opções -------------------------------------------
 
-if (!require("pacman")) require(install.packages("pacman"))
-
-pacman::p_load(
-  tidyverse,
-  glue,
-  usethis,
-  shinydashboard,
-  plotly,
-  shinydashboardPlus,
-  here,
-  MetBrewer,
-  shiny,
-  sf,
-  arrow,
-  tmaptools,
-  reactlog,
-  install = F
-)
+library(tidyverse)
+library(glue)
+library(shinydashboard)
+# library(shinydashboardPlus)
+# library(dashboardthemes)
+library(plotly)
+library(MetBrewer)
+library(shiny)
+library(sf)
+library(arrow)
+library(tmaptools)
 
 options(scipen = 999)
 
-reactlog::reactlog_enable()
+# reactlog::reactlog_enable()
 
 # variáveis ---------------------------------------------------------------
 
@@ -68,7 +61,7 @@ for (i in 1:length(shinydb)) {
 
 ufs <- readr::read_rds("output/geom_ufs.rds")
 
-# shiny -------------------------------------------------------------------
+# header ------------------------------------------------------------------
 
 header <- shinydashboard::dashboardHeader(
   title = tags$a(
@@ -86,7 +79,8 @@ header <- shinydashboard::dashboardHeader(
   )
 )
 
-# menu lateral do dashboard
+# sidebar -----------------------------------------------------------------
+
 sidebar <- shinydashboard::dashboardSidebar(
   shinydashboard::sidebarMenu(
     shinydashboard::menuItem(
@@ -101,6 +95,8 @@ sidebar <- shinydashboard::dashboardSidebar(
     )
   )
 )
+
+# body --------------------------------------------------------------------
 
 body <- shinydashboard::dashboardBody(
   shinydashboard::tabItems(
@@ -158,10 +154,14 @@ body <- shinydashboard::dashboardBody(
   )
 )
 
+# ui ----------------------------------------------------------------------
+
 ui <- shinydashboard::dashboardPage(
   title = "Abramge", # título da aba do dashboard
   header, sidebar, body
 )
+
+# server ------------------------------------------------------------------
 
 server <- function(input, output, session) {
 
@@ -292,4 +292,5 @@ server <- function(input, output, session) {
 
 shiny::shinyApp(ui, server)
 
-shiny::reactlogShow()
+# shiny::reactlogShow()
+

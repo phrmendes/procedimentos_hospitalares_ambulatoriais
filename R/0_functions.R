@@ -249,22 +249,26 @@ export_parquet <- function(x, complete_vars, db_name, export_name) {
     new = "categoria"
   )
 
-  termos_nulos <- y[
-    ,
-    lapply(.SD, sum),
-    .SDcols = c("tot_qt", "tot_vl", "mean_vl"),
-    by = .(termo)
-  ][
-    ,
-    .(tot = sum(tot_qt, tot_vl, mean_vl)),
-    by = .(termo)
-  ][
-    tot == 0,
-    "termo"
-  ] |>
-    purrr::flatten_chr()
+  proc_nulos <- purrr::map(
+    y,
+    ~ .x[
+      ,
+      lapply(.SD, sum),
+      .SDcols = c("tot_qt", "tot_vl", "mean_vl"),
+      by = "cd_procedimento"
+    ][
+      ,
+      .(sum = tot_qt + tot_vl + mean_vl),
+      by = "cd_procedimento"
+    ][
+      sum == 0
+    ][
+      ,
+      collapse::funique(cd_procedimento)
+    ]
+  )
 
-  y <- y[termo %not_in% termos_nulos]
+  y <- y[termo %not_in% proc_nulos]
 
   arrow::write_parquet(y, glue::glue("output/{export_name}.parquet"))
 

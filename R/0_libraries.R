@@ -25,8 +25,8 @@ pacman::p_load(
   shinydashboard,
   plotly,
   ggthemes,
-  dashboardthemes, # excluir
-  shinydashboardPlus, # excluir
+  dashboardthemes,
+  shinydashboardPlus,
   geobr,
   sf,
   MetBrewer,
