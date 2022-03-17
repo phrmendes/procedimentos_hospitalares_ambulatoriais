@@ -7,8 +7,6 @@
 source("R/0_libraries.R")
 source("R/0_functions.R")
 
-future::plan(multisession)
-
 # shapefile de estados ----------------------------------------------------
 
 geobr::read_state(
@@ -17,7 +15,7 @@ geobr::read_state(
 ) |>
   dplyr::select(code_state, abbrev_state, geom) |>
   dplyr::rename(categoria = abbrev_state) |>
-  saveRDS(file = "output/geom_ufs.rds")
+  readr::write_rds("output/geom_ufs.rds")
 
 # databases hospitalares --------------------------------------------------
 
@@ -29,72 +27,62 @@ parametros <- list(
 
 estatisticas <- list(
   cols = c("uf_prestador", "faixa_etaria", "sexo"),
-  names = paste0("base_hosp_", c("uf", "idade", "sexo"))
+  names = paste0("base_hosp_", c("uf", "idade", "sexo"), "_2020"),
+  types = c("uf", "idade", "sexo")
 )
 
-pbapply::pblapply(
+purrr::walk(
   1:3,
-  function(i) {
-    export_parquet(
-      x = estatisticas$cols[i],
-      complete_vars = parametros[[i]],
-      db_name = "proc_hosp_db",
-      export_name = estatisticas$names[i]
-    )
-
-    gc()
-
-    return("Importado!")
-  }
+  ~ export_parquet(
+    x = estatisticas$cols[.x],
+    complete_vars = parametros[[.x]],
+    export_name = estatisticas$names[.x],
+    type = estatisticas$types[.x],
+    db_name = "proc_hosp_db"
+  )
 )
+
+base_hosp <- purrr::map(
+  fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$"),
+  ~ arrow::read_parquet(.x) |>
+    dplyr::collect()
+) |>
+  data.table::rbindlist()
+
+base_hosp[, .(termos = unique(termo))] |>
+  arrow::write_parquet("output/termos_hosp_2020.parquet")
+
+fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$") |>
+  fs::file_delete()
+
+arrow::write_parquet(base_hosp, "output/base_hosp_2020.parquet")
 
 # databases ambulatoriais -------------------------------------------------
 
-estatisticas <- list(
-  cols = c("uf_prestador", "faixa_etaria", "sexo"),
-  names = paste0("base_amb_", c("uf", "idade", "sexo"))
-)
+estatisticas$names <- paste0("base_amb_", c("uf", "idade", "sexo"), "_2020")
 
-pbapply::pblapply(
+purrr::walk(
   1:3,
-  function(i) {
-    export_parquet(
-      x = estatisticas$cols[i],
-      complete_vars = parametros[[i]],
-      db_name = "proc_amb_db",
-      export_name = estatisticas$names[i]
-    )
-
-    gc()
-
-    return("Exportado!")
-  }
+  ~ export_parquet(
+    x = estatisticas$cols[.x],
+    complete_vars = parametros[[.x]],
+    export_name = estatisticas$names[.x],
+    type = estatisticas$types[.x],
+    db_name = "proc_amb_db"
+  )
 )
 
-# procedimentos excedentes e lista de procedimentos disponíveis -----------
+base_amb <- purrr::map(
+  fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$"),
+  ~ arrow::read_parquet(.x) |>
+    dplyr::collect()
+) |>
+  data.table::rbindlist()
 
-shinydb <- purrr::map(
-  fs::dir_ls("output/", regexp = "base(.*)parquet"),
-  arrow::read_parquet
-)
+base_amb[, .(termos = unique(termo))] |>
+  arrow::write_parquet("output/termos_amb_2020.parquet")
 
-x <- c(2, 3, 5, 6)
-y <- c(1, 1, 4, 4)
+fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$") |>
+  fs::file_delete()
 
-for (i in 1:4) {
-  shinydb[[x[i]]] <- shinydb[[x[i]]] |> dplyr::semi_join(shinydb[[y[i]]], by = "cd_procedimento")
-} # filtra procedimentos excedentes em outras bases
-
-shinydb[[3]] |>
-  dplyr::distinct(termo) |>
-  arrow::write_parquet("output/termos_amb.parquet")
-
-shinydb[[6]] |>
-  dplyr::distinct(termo) |>
-  arrow::write_parquet("output/termos_hosp.parquet")
-
-purrr::walk2(
-  .x = shinydb,
-  .y = names(shinydb),
-  ~ arrow::write_parquet(.x, glue::glue("{.y}"))
-)
+arrow::write_parquet(base_amb, "output/base_amb_2020.parquet")

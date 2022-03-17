@@ -23,11 +23,11 @@ options(scipen = 999)
 # variáveis ---------------------------------------------------------------
 
 vars_shiny <- list(
-  proc_hosp = arrow::read_parquet("output/termos_hosp.parquet") |>
-    dplyr::arrange(termo) |>
+  proc_hosp = arrow::read_parquet("output/termos_hosp_2020.parquet") |>
+    dplyr::arrange(termos) |>
     purrr::flatten_chr(),
-  proc_amb = arrow::read_parquet("output/termos_amb.parquet") |>
-    dplyr::arrange(termo) |>
+  proc_amb = arrow::read_parquet("output/termos_amb_2020.parquet") |>
+    dplyr::arrange(termos) |>
     purrr::flatten_chr(),
   categoria = c("Faixa etária", "Sexo", "UF"),
   estatistica = c("Quantidade total", "Valor total", "Valor médio")
@@ -35,21 +35,7 @@ vars_shiny <- list(
 
 shinydb <- purrr::map(
   fs::dir_ls("output/", regexp = "base(.*)parquet"),
-  function(x) {
-    df <- arrow::read_parquet(x) |>
-    tibble::as_tibble()
-
-    if ("1 a 4" %in% df$categoria) {
-      df <- df |>
-        dplyr::mutate(categoria = factor(
-          categoria,
-          levels = c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
-          )
-        )
-    }
-
-    return(df)
-  }
+  arrow::read_parquet
 )
 
 names(shinydb) <- names(shinydb) |>
@@ -58,6 +44,8 @@ names(shinydb) <- names(shinydb) |>
 for (i in 1:length(shinydb)) {
   names(shinydb[[i]])[4:6] <- vars_shiny$estatistica
 }
+
+# levels = c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
 
 ufs <- readr::read_rds("output/geom_ufs.rds")
 

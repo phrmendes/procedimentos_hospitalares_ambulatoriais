@@ -97,14 +97,11 @@ unpack_write_parquet <- function(url, mes_url, cols, indexes) {
     list(temp, csv_file),
     ~ fs::file_delete(glue::glue("{.x}"))
   )
-
-  gc()
 }
-
 
 # função para lidar com a base gigantesca de dados ambulatoriais ----------
 
-parquet_amb <- function(path_1, path_2, termos) {
+clean_db <- function(path_1, path_2, termos) {
   db_1 <- arrow::read_parquet(path_1) |>
     data.table::as.data.table(key = c("id_evento_atencao_saude", "mes"))
 
@@ -122,16 +119,27 @@ parquet_amb <- function(path_1, path_2, termos) {
 
   data.table::setkey(db_3, "cd_procedimento")
 
-  db_3 <- db_3[
-    termos,
-    on = "cd_procedimento"
-  ]
+  db_3 <- data.table::merge.data.table(
+    db_3, termos,
+    by = "cd_procedimento",
+    all.x = TRUE
+  )
 
-  name <- stringr::str_extract(path_1, "(?<=/parquet/)(.*)(?=\\_AMB_DET.parquet$)")
+  db_3 <- db_3[!is.na(termo)]
 
-  arrow::write_parquet(db_3, glue::glue("data/proc_amb_db/{name}.parquet"))
+  name <- stringr::str_extract(
+    path_1,
+    "(?<=/parquet/)(.*)(?=\\_DET.parquet$)"
+  )
 
-  gc()
+  db <- stringr::str_to_lower(
+    stringr::str_extract(
+      name,
+      "([:alpha:]{3}|[:alpha:]{4})$"
+    )
+  )
+
+  arrow::write_parquet(db_3, glue::glue("data/proc_{db}_db/{name}.parquet"))
 }
 
 # função que cria dummies que indicam as tabelas base ---------------------
@@ -164,113 +172,114 @@ load_data <- function(x) {
 
 # função de tratamento da database do shinyapp ----------------------------
 
-export_parquet <- function(x, complete_vars, db_name, export_name) {
+export_parquet <- function(x, complete_vars, db_name, export_name, type) {
   df <- arrow::open_dataset(glue::glue("data/{db_name}"))
 
   group_by_var <- as.symbol(x)
 
-  y <- df |>
-    dplyr::group_by(cd_procedimento, termo, {{ group_by_var }}) |>
-    dplyr::summarise(
-      tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
-      tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
-    ) |>
-    dplyr::ungroup() |>
-    dplyr::mutate(
-      mean_vl = round(tot_vl / tot_qt, 2)
-    ) |>
-    dplyr::collect() |>
-    data.table::as.data.table()
+  mes <- c(paste0("0", 1:9), 10:12)
 
-  y <- y[
-    termo != "SEM INFORMAÇÕES",
-    termo := furrr::future_map_chr(
-      termo,
-      stringr::str_to_upper
-    )
-  ]
+  pbapply::pblapply(
+    mes,
+    function(i){
+      y <- df |>
+        dplyr::select(-tabela) |>
+        dplyr::filter(mes == i) |>
+        dplyr::group_by(cd_procedimento, termo, {{ group_by_var }}) |>
+        dplyr::summarise(
+          tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
+          tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
+        ) |>
+        dplyr::ungroup() |>
+        dplyr::mutate(
+          mean_vl = tot_vl / tot_qt
+        ) |>
+        dplyr::filter(termo != "SEM INFORMAÇÕES")
 
-  if (x == "uf_prestador") {
-    y <- y[
-      ,
-      .SD[
-        .(uf_prestador = complete_vars),
-        on = x
-      ],
-      by = .(cd_procedimento, termo) # completando UF's faltantes
-    ]
-  } else if (x == "faixa_etaria") {
-    y <- y[
-      ,
-      faixa_etaria := tidyfast::dt_case_when(
-        faixa_etaria == "<1" ~ "< 1",
-        faixa_etaria == "80 ou mais" ~ "80 <",
-        TRUE ~ faixa_etaria
+      proc_nulo <- y |>
+        dplyr::group_by(cd_procedimento) |>
+        dplyr::summarise(
+          tot_qt = sum(tot_qt),
+          tot_vl = sum(tot_vl),
+          mean_vl = sum(mean_vl)
+        ) |>
+        dplyr::filter(tot_qt != 0 & tot_vl != 0 & mean_vl != 0) |>
+        dplyr::select(cd_procedimento)
+
+      z <- y |>
+        dplyr::semi_join(proc_nulo, by = "cd_procedimento") |>
+        dplyr::collect() |>
+        data.table::as.data.table()
+
+      if (x == "uf_prestador") {
+        z <- z[
+          ,
+          .SD[
+            .(uf_prestador = complete_vars),
+            on = x
+          ],
+          by = .(cd_procedimento, termo) # completando UF's faltantes
+        ]
+      } else if (x == "faixa_etaria") {
+        z <- z[
+          ,
+          faixa_etaria := tidyfast::dt_case_when(
+            faixa_etaria == "<1" ~ "< 1",
+            faixa_etaria == "80 ou mais" ~ "80 <",
+            TRUE ~ faixa_etaria
+          )
+        ][
+          ,
+          .SD[
+            .(faixa_etaria = complete_vars),
+            on = x
+          ],
+          by = .(cd_procedimento, termo) # completando faixas etárias faltantes
+        ]
+      } else {
+        z <- z[
+          ,
+          sexo := tidyfast::dt_case_when(
+            sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
+            TRUE ~ sexo
+          )
+        ][
+          ,
+          .SD[
+            .(sexo = complete_vars),
+            on = x
+          ],
+          by = .(cd_procedimento, termo) # completando sexos faltantes
+        ]
+      }
+
+      z <- z[
+        ,
+        furrr::future_map(
+          .SD,
+          collapse::replace_NA,
+          value = 0
+        )
+      ][
+        termo != "0"
+      ][
+        ,
+        ':=' (
+          mes = as.integer(i),
+          ano = as.integer(stringr::str_extract(export_name, "[0-9]{4}$")),
+          tipo = type
+        )
+      ]
+
+      data.table::setnames(
+        z,
+        old = paste0(x),
+        new = "categoria"
       )
-    ][
-      ,
-      .SD[
-        .(faixa_etaria = complete_vars),
-        on = x
-      ],
-      by = .(cd_procedimento, termo) # completando faixas etárias faltantes
-    ]
-  } else {
-    y <- y[
-      ,
-      sexo := tidyfast::dt_case_when(
-        sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
-        TRUE ~ sexo
-      )
-    ][
-      ,
-      .SD[
-        .(sexo = complete_vars),
-        on = x
-      ],
-      by = .(cd_procedimento, termo) # completando sexos faltantes
-    ]
-  }
 
-  y <- y[
-    ,
-    furrr::future_map(
-      .SD,
-      collapse::replace_NA,
-      value = 0
-    )
-  ][
-    termo != "0"
-  ]
-
-  data.table::setnames(
-    y,
-    old = paste0(x),
-    new = "categoria"
+      arrow::write_parquet(z, glue::glue("output/{export_name}_{i}.parquet"))
+    }
   )
-
-  proc_nulos <- purrr::map(
-    y,
-    ~ .x[
-      ,
-      lapply(.SD, sum),
-      .SDcols = c("tot_qt", "tot_vl", "mean_vl"),
-      by = "cd_procedimento"
-    ][
-      ,
-      .(sum = tot_qt + tot_vl + mean_vl),
-      by = "cd_procedimento"
-    ][
-      sum == 0
-    ][
-      ,
-      collapse::funique(cd_procedimento)
-    ]
-  )
-
-  y <- y[termo %not_in% proc_nulos]
-
-  arrow::write_parquet(y, glue::glue("output/{export_name}.parquet"))
 
   gc()
 }
