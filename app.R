@@ -22,6 +22,14 @@ options(scipen = 999)
 
 # variáveis ---------------------------------------------------------------
 
+geobr::read_state(
+  code_state = "all",
+  showProgress = FALSE
+) |>
+  dplyr::select(code_state, abbrev_state, geom) |>
+  dplyr::rename(categoria = abbrev_state) |>
+  readr::write_rds("output/geom_ufs.rds")
+
 vars_shiny <- list(
   proc_hosp = arrow::read_parquet("output/termos_hosp_2020.parquet") |>
     dplyr::arrange(termos) |>

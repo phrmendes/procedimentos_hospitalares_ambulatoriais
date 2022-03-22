@@ -9,6 +9,8 @@ source("R/0_functions.R")
 
 # memory.size(max = 10^12)
 
+ano <- 2017
+
 # definindo termos da buscas no dados abertos -----------------------------
 
 estados <- c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
@@ -18,7 +20,7 @@ bases <- c("DET", "CONS")
 urls <- purrr::map(
   bases,
   ~ base(
-    ano = "2020",
+    ano = ano,
     estado = estados,
     mes = c(paste0("0", 1:9), 10:12),
     base = .x,
@@ -92,9 +94,9 @@ pbapply::pblapply(
   length() %>% # referencia o objeto vindo no pipe
   paste0(., " importados.")
 
-# tratando database -------------------------------------------------------
+# merge entre bases DET e CONS --------------------------------------------
 
-if (!fs::dir_exists("data/proc_hosp_db/")) fs::dir_create("data/proc_hosp_db/")
+fs::dir_create("data/proc_hosp_db/")
 
 det_db <- paste0(fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet"))
 
@@ -119,3 +121,43 @@ pbapply::pblapply(
 )
 
 fs::dir_delete("data/parquet/")
+
+# tratando database -------------------------------------------------------
+
+parametros <- list(
+  estados = c("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"),
+  faixas = c("1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "< 1", "N. I."),
+  sexos = c("Masculino", "Feminino", "N. I.")
+)
+
+estatisticas <- list(
+  cols = c("uf_prestador", "faixa_etaria", "sexo"),
+  names = paste0("base_hosp_", c("uf", "idade", "sexo"), "_", ano),
+  types = c("uf", "idade", "sexo")
+)
+
+purrr::walk(
+  1:3,
+  ~ export_parquet(
+    x = estatisticas$cols[.x],
+    complete_vars = parametros[[.x]],
+    export_name = estatisticas$names[.x],
+    type = estatisticas$types[.x],
+    db_name = "proc_hosp_db"
+  )
+)
+
+base_hosp <- purrr::map(
+  fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$"),
+  ~ arrow::read_parquet(.x) |>
+    dplyr::collect()
+) |>
+  data.table::rbindlist()
+
+base_hosp[, .(termos = unique(termo))] |>
+  arrow::write_parquet(glue::glue("output/termos_hosp_{ano}.parquet"))
+
+fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$") |>
+  fs::file_delete()
+
+arrow::write_parquet(base_hosp, glue::glue("output/base_hosp_{ano}.parquet"))
