@@ -7,6 +7,8 @@
 source("R/0_libraries.R")
 source("R/0_functions.R")
 
+ano <- 2019
+
 # shapefile de estados ----------------------------------------------------
 
 geobr::read_state(
@@ -27,7 +29,7 @@ parametros <- list(
 
 estatisticas <- list(
   cols = c("uf_prestador", "faixa_etaria", "sexo"),
-  names = paste0("base_hosp_", c("uf", "idade", "sexo"), "_2020"),
+  names = paste0("base_hosp_", c("uf", "idade", "sexo"), "_", ano),
   types = c("uf", "idade", "sexo")
 )
 
@@ -50,16 +52,16 @@ base_hosp <- purrr::map(
   data.table::rbindlist()
 
 base_hosp[, .(termos = unique(termo))] |>
-  arrow::write_parquet("output/termos_hosp_2020.parquet")
+  arrow::write_parquet(glue::glue("output/termos_hosp_{ano}.parquet"))
 
 fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$") |>
   fs::file_delete()
 
-arrow::write_parquet(base_hosp, "output/base_hosp_2020.parquet")
+arrow::write_parquet(base_hosp, glue::glue("output/base_hosp_{ano}.parquet"))
 
 # databases ambulatoriais -------------------------------------------------
 
-estatisticas$names <- paste0("base_amb_", c("uf", "idade", "sexo"), "_2020")
+estatisticas$names <- paste0("base_amb_", c("uf", "idade", "sexo"), "_", ano)
 
 purrr::walk(
   1:3,
@@ -80,9 +82,9 @@ base_amb <- purrr::map(
   data.table::rbindlist()
 
 base_amb[, .(termos = unique(termo))] |>
-  arrow::write_parquet("output/termos_amb_2020.parquet")
+  arrow::write_parquet(glue::glue("output/termos_amb_{ano}.parquet"))
 
 fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$") |>
   fs::file_delete()
 
-arrow::write_parquet(base_amb, "output/base_amb_2020.parquet")
+arrow::write_parquet(base_amb, glue::glue("output/base_amb_{ano}.parquet"))

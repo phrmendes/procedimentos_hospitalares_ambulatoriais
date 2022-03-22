@@ -18,7 +18,7 @@ bases <- c("DET", "CONS")
 urls <- purrr::map(
   bases,
   ~ base(
-    ano = "2020",
+    ano = "2019",
     estado = estados,
     mes = c(paste0("0", 1:9), 10:12),
     base = .x,
