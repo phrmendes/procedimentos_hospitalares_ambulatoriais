@@ -9,7 +9,7 @@ source("R/0_functions.R")
 
 # memory.size(max = 10^12)
 
-ano <- 2017
+ano <- 2013
 
 # definindo termos da buscas no dados abertos -----------------------------
 
@@ -107,7 +107,7 @@ tuss <- arrow::read_parquet("data/tabelas_tuss.parquet") # dicionário de termos
 pbapply::pblapply(
   1:length(det_db),
   function(i) {
-    clean_db(
+    merge_db(
       path_1 = det_db[i],
       path_2 = cons_db[i],
       termos = tuss
@@ -161,3 +161,5 @@ fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$") |>
   fs::file_delete()
 
 arrow::write_parquet(base_hosp, glue::glue("output/base_hosp_{ano}.parquet"))
+
+fs::dir_delete("data/proc_hosp_db/")

@@ -101,7 +101,7 @@ unpack_write_parquet <- function(url, mes_url, cols, indexes) {
 
 # função para lidar com a base gigantesca de dados ambulatoriais ----------
 
-clean_db <- function(path_1, path_2, termos) {
+merge_db <- function(path_1, path_2, termos) {
   db_1 <- arrow::read_parquet(path_1) |>
     data.table::as.data.table(key = c("id_evento_atencao_saude", "mes"))
 
@@ -140,6 +140,11 @@ clean_db <- function(path_1, path_2, termos) {
   )
 
   arrow::write_parquet(db_3, glue::glue("data/proc_{db}_db/{name}.parquet"))
+
+  purrr::walk(
+    list(path_1, path_2),
+    fs::file_delete
+  )
 }
 
 # função que cria dummies que indicam as tabelas base ---------------------
@@ -181,7 +186,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type) {
 
   pbapply::pblapply(
     mes,
-    function(i){
+    function(i) {
       y <- df |>
         dplyr::select(-tabela) |>
         dplyr::filter(mes == i) |>
@@ -264,7 +269,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type) {
         termo != "0"
       ][
         ,
-        ':=' (
+        ":="(
           mes = as.integer(i),
           ano = as.integer(stringr::str_extract(export_name, "[0-9]{4}$")),
           tipo = type
