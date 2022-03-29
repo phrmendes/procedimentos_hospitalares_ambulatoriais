@@ -7,8 +7,6 @@
 library(tidyverse)
 library(glue)
 library(shinydashboard)
-# library(shinydashboardPlus)
-# library(dashboardthemes)
 library(plotly)
 library(MetBrewer)
 library(shiny)
@@ -18,23 +16,23 @@ library(tmaptools)
 
 options(scipen = 999)
 
-# reactlog::reactlog_enable()
-
 # variáveis ---------------------------------------------------------------
 
-geobr::read_state(
-  code_state = "all",
-  showProgress = FALSE
-) |>
-  dplyr::select(code_state, abbrev_state, geom) |>
-  dplyr::rename(categoria = abbrev_state) |>
-  readr::write_rds("output/geom_ufs.rds")
+# geobr::read_state(
+#   code_state = "all",
+#   showProgress = FALSE
+# ) |>
+#   dplyr::select(code_state, abbrev_state, geom) |>
+#   dplyr::rename(categoria = abbrev_state) |>
+#   readr::write_rds("output/geom_ufs.rds")
+
+geom_ufs <- readr::read_rds("output/geom_ufs.rds")
 
 vars_shiny <- list(
-  proc_hosp = arrow::read_parquet("output/termos_hosp_2020.parquet") |>
+  proc_hosp_2020 = arrow::read_parquet("output/termos_hosp_2020.parquet") |>
     dplyr::arrange(termos) |>
     purrr::flatten_chr(),
-  proc_amb = arrow::read_parquet("output/termos_amb_2020.parquet") |>
+  proc_amb_2020 = arrow::read_parquet("output/termos_amb_2020.parquet") |>
     dplyr::arrange(termos) |>
     purrr::flatten_chr(),
   categoria = c("Faixa etária", "Sexo", "UF"),
@@ -42,20 +40,16 @@ vars_shiny <- list(
 )
 
 shinydb <- purrr::map(
-  fs::dir_ls("output/", regexp = "base(.*)parquet"),
+  fs::dir_ls("output/", regexp = "base(.*)2020\\.parquet"),
   arrow::read_parquet
 )
 
 names(shinydb) <- names(shinydb) |>
   stringr::str_extract("(?<=output/)(.*)(?=.parquet)")
 
-for (i in 1:length(shinydb)) {
+for (i in seq_len(length(shinydb))) {
   names(shinydb[[i]])[4:6] <- vars_shiny$estatistica
 }
-
-# levels = c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
-
-ufs <- readr::read_rds("output/geom_ufs.rds")
 
 # header ------------------------------------------------------------------
 
@@ -98,7 +92,7 @@ body <- shinydashboard::dashboardBody(
   shinydashboard::tabItems(
     shinydashboard::tabItem(
       tabName = "proc",
-      h2("Lista de procedimentos"),
+      h2("Estatísticas anuais"),
       shiny::fluidRow(
         shinydashboard::box(
           title = "Parâmetros",
@@ -110,6 +104,12 @@ body <- shinydashboard::dashboardBody(
             label = "Selecione uma base de procedimentos",
             selected = NULL,
             choices = c("Hospitalares", "Ambulatoriais")
+          ),
+          shiny::selectizeInput(
+            inputId = "ano",
+            label = "Selecione um ano",
+            selected = "2020",
+            choices = "2020"
           ),
           shiny::selectizeInput(
             inputId = "procedimento",
@@ -159,41 +159,53 @@ ui <- shinydashboard::dashboardPage(
 
 # server ------------------------------------------------------------------
 
-server <- function(input, output, session) {
+# input <- list(
+#   base_procedimentos = "Hospitalares",
+#   categoria = "UF",
+#   estatistica = "Quantidade total",
+#   procedimento = "CONSULTA EM CONSULTÓRIO (NO HORÁRIO NORMAL OU PREESTABELECIDO)",
+#   ano = 2020
+# )
 
+server <- function(input, output, session) {
   dados <- shiny::reactive(
     if (input$base_procedimentos == "Hospitalares") {
-      if (input$categoria == "Sexo") {
-        dados <- shinydb$base_hosp_sexo
-      } else if (input$categoria == "UF") {
-        dados <- shinydb$base_hosp_uf
-      } else {
-        dados <- shinydb$base_hosp_idade
-      }
+      dados <- shinydb$base_hosp[tipo == stringr::str_to_lower(input$categoria)]
     } else {
-      if (input$categoria == "Sexo") {
-        dados <- shinydb$base_amb_sexo
-      } else if (input$categoria == "UF") {
-        dados <- shinydb$base_amb_uf
-      } else {
-        dados <- shinydb$base_amb_idade
-      }
+      dados <- shinydb$base_amb[tipo == stringr::str_to_lower(input$categoria)]
     }
   )
 
-  output$bar <- plotly::renderPlotly({
-
-    df <- dados() |>
-      dplyr::filter(termo == input$procedimento) |>
+  dados_anuais <- shiny::reactive(
+    dados_anuais <- dados()[
+      ano == input$ano & termo == input$procedimento,
+      lapply(.SD, collapse::fsum),
+      .SDcols = c("Quantidade total", "Valor total", "Valor médio"),
+      by = .(cd_procedimento, termo, categoria)
+    ] |>
+      tibble::as_tibble() |>
       dplyr::select(categoria, dplyr::starts_with(glue::glue("{input$estatistica}")))
+  )
 
-    plot_bar <- df |>
+  dados_mensais <- shiny::reactive(
+    dados_mensais <- dados()[
+      ano == input$ano & termo == input$procedimento,
+      lapply(.SD, collapse::fsum),
+      .SDcols = c("Quantidade total", "Valor total", "Valor médio"),
+      by = .(cd_procedimento, termo, categoria, mes)
+    ] |>
+      tibble::as_tibble() |>
+      dplyr::select(categoria, mes, dplyr::starts_with(glue::glue("{input$estatistica}")))
+  )
+
+  output$bar <- plotly::renderPlotly({
+    plot_bar <- dados_anuais() |>
       ggplot() +
       geom_col(
         aes_string(
-          x = names(df)[1],
-          y = glue::glue("`{names(df)[2]}`"),
-          fill = names(df)[1]
+          x = names(dados_anuais())[1],
+          y = glue::glue("`{names(dados_anuais())[2]}`"),
+          fill = names(dados_anuais())[1]
         )
       ) +
       ggtitle(
@@ -214,11 +226,9 @@ server <- function(input, output, session) {
   })
 
   output$map <- plotly::renderPlotly({
-    plot_map <- dados() |>
-      dplyr::filter(termo == input$procedimento) |>
-      dplyr::select(categoria, dplyr::starts_with(glue::glue("{input$estatistica}"))) |>
+    plot_map <- dados_anuais() |>
       dplyr::left_join(
-        ufs,
+        geom_ufs,
         by = "categoria"
       ) |>
       ggplot() +
@@ -262,17 +272,17 @@ server <- function(input, output, session) {
 
   reactive_selectisize <- shiny::reactive(
     if (input$base_procedimentos == "Hospitalar") {
-      return(vars_shiny$proc_hosp)
+      return(vars_shiny$proc_hosp_2020)
     } else {
-      return(vars_shiny$proc_amb)
+      return(vars_shiny$proc_amb_2020)
     }
   )
 
   shiny::observe({
     if (input$base_procedimentos == "Hospitalar") {
-      options <- vars_shiny$proc_hosp
+      options <- vars_shiny$proc_hosp_2020
     } else {
-      options <- vars_shiny$proc_amb
+      options <- vars_shiny$proc_amb_2020
     }
 
     shiny::updateSelectizeInput(
@@ -283,10 +293,6 @@ server <- function(input, output, session) {
       server = TRUE
     )
   })
-
 }
 
 shiny::shinyApp(ui, server)
-
-# shiny::reactlogShow()
-

@@ -196,10 +196,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type) {
           tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
         ) |>
         dplyr::ungroup() |>
-        dplyr::mutate(
-          mean_vl = tot_vl / tot_qt
-        ) |>
-        dplyr::filter(termo != "SEM INFORMAÇÕES")
+        dplyr::mutate(mean_vl = tot_vl / tot_qt)
 
       proc_nulo <- y |>
         dplyr::group_by(cd_procedimento) |>

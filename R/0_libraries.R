@@ -14,9 +14,9 @@ pacman::p_load(
   glue,
   tidyfast,
   usethis,
-  future,
   furrr,
   pbapply,
+  googleComputeEngineR,
   janitor,
   styler,
   fs,
@@ -31,8 +31,8 @@ pacman::p_load(
   sf,
   MetBrewer,
   memoise,
-  DBI,
   miniUI,
   parallel,
+  lintr,
   install = F
 )
