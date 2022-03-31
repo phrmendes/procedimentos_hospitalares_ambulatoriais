@@ -45,11 +45,13 @@
     },
     "MetBrewer": {
       "Package": "MetBrewer",
-      "Version": "0.1.0",
+      "Version": "0.2.0",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "1c71a9a7659f56389404aad6dc8ea8b0",
-      "Requirements": []
+      "Hash": "9dda8af6359c4b3932426430c38fa1b1",
+      "Requirements": [
+        "ggplot2"
+      ]
     },
     "R.cache": {
       "Package": "R.cache",
@@ -544,6 +546,16 @@
         "tibble",
         "tidyselect",
         "vctrs"
+      ]
+    },
+    "duckdb": {
+      "Package": "duckdb",
+      "Version": "0.3.1-1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "209719c79ec850e02212a54c23995b9d",
+      "Requirements": [
+        "DBI"
       ]
     },
     "e1071": {
@@ -1688,6 +1700,18 @@
         "xtable"
       ]
     },
+    "shinycssloaders": {
+      "Package": "shinycssloaders",
+      "Version": "1.0.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "f39bb3c44a9b496723ec7e86f9a771d8",
+      "Requirements": [
+        "digest",
+        "glue",
+        "shiny"
+      ]
+    },
     "shinydashboard": {
       "Package": "shinydashboard",
       "Version": "0.7.2",
@@ -1713,6 +1737,27 @@
         "shiny",
         "shinydashboard",
         "waiter"
+      ]
+    },
+    "showtext": {
+      "Package": "showtext",
+      "Version": "0.9-5",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "b588dee88e238bf811e27f12edee9433",
+      "Requirements": [
+        "showtextdb",
+        "sysfonts"
+      ]
+    },
+    "showtextdb": {
+      "Package": "showtextdb",
+      "Version": "3.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "c12e756cf947e58b0f2c2a520521a5a8",
+      "Requirements": [
+        "sysfonts"
       ]
     },
     "snakecase": {
@@ -1796,6 +1841,14 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "b227d13e29222b4574486cfcbde077fa",
+      "Requirements": []
+    },
+    "sysfonts": {
+      "Package": "sysfonts",
+      "Version": "0.8.8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "7f4dac41a3e348ae12832167e6beb875",
       "Requirements": []
     },
     "testthat": {
