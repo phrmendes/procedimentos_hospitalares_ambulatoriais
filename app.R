@@ -63,64 +63,71 @@ sidebar <- shinydashboard::dashboardSidebar(
 
 # body --------------------------------------------------------------------
 
+# style = "font-size:14px;font-family:'Fira Sans', sans-serif;", # fonte open sans
+
+
 body <- shinydashboard::dashboardBody(
   tags$head(
     tags$link(rel = "stylesheet", type = "text/css", href = "bootstrap_custom.css")
   ),
-  h2("Procedimentos", style = "font-family:'Fira Sans', sans-serif;"),
+  h2("Procedimentos Médicos e Ambulatoriais", style = "font-family:'Fira Sans', sans-serif;"),
   shiny::fluidRow(
-    shinydashboard::box(
-      style = "font-size:14px;font-family:'Fira Sans', sans-serif;",
-      width = 4,
-      solidHeader = TRUE,
+    column(
+      width = 2,
       shiny::selectInput(
         inputId = "base_procedimentos",
-        label = "Selecione uma base de procedimentos",
+        label = "Base de procedimentos",
         selected = NULL,
         choices = c("Hospitalares", "Ambulatoriais")
-      ),
+      )
+    ),
+    column(
+      width = 1,
       shiny::selectInput(
         inputId = "ano",
-        label = "Selecione um ano",
+        label = "Ano",
         selected = NULL,
         choices = 2018:2020
-      ),
+      )
+    ),
+    column(
+      width = 5,
       shiny::selectizeInput(
         inputId = "procedimento",
-        label = "Selecione um procedimento",
+        label = "Procedimento",
         selected = NULL,
         choices = NULL
-      ),
+      )
+    ),
+    column(
+      width = 2,
       shiny::selectInput(
         inputId = "categoria",
-        label = "Selecione uma categoria",
+        label = "Categoria",
         selected = NULL,
         choices = vars_shiny$categoria
-      ),
+      )
+    ),
+    column(
+      width = 2,
       shiny::selectInput(
         inputId = "estatistica",
         label = "Selecione uma estatística",
         selected = NULL,
         choices = vars_shiny$estatistica
-      ),
-      shiny::downloadButton(
-        outputId = "download_anual",
-        label = "Dados anuais",
-        icon = shiny::icon("download")
-      ),
-      shiny::downloadButton(
-        outputId = "download_mensal",
-        label = "Dados mensais",
-        icon = shiny::icon("download")
       )
+    )
+  ),
+  shiny::fluidRow(
+    shiny::downloadButton(
+      outputId = "download_anual",
+      label = "Dados anuais",
+      icon = shiny::icon("download")
     ),
-    shiny::conditionalPanel(
-      condition = "input.categoria == 'UF'",
-      shinydashboard::box(
-        shinycssloaders::withSpinner(plotly::plotlyOutput("map")),
-        width = 4,
-        align = "center"
-      )
+    shiny::downloadButton(
+      outputId = "download_mensal",
+      label = "Dados mensais",
+      icon = shiny::icon("download")
     )
   ),
   shiny::fluidRow(
@@ -133,6 +140,16 @@ body <- shinydashboard::dashboardBody(
       shinycssloaders::withSpinner(plotly::plotlyOutput("ts")),
       width = 6,
       align = "center"
+    )
+  ),
+  shiny::fluidRow(
+    shiny::conditionalPanel(
+      condition = "input.categoria == 'UF'",
+      shinydashboard::box(
+        shinycssloaders::withSpinner(plotly::plotlyOutput("map")),
+        width = 4,
+        align = "center"
+      )
     )
   )
 )
@@ -193,7 +210,7 @@ server <- function(input, output, session) {
             levels = c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
           )
         ) |>
-      dplyr::arrange(categoria)
+        dplyr::arrange(categoria)
     }
 
     return(dados_anuais)
