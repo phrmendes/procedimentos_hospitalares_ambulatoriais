@@ -34,6 +34,5 @@ pacman::p_load(
   miniUI,
   parallel,
   lintr,
-  duckdb,
   install = F
 )

@@ -20,7 +20,7 @@ library(writexl)
 
 options(scipen = 999)
 options(dplyr.summarise.inform = FALSE)
-sysfonts::font_add_google("Fira Sans")
+sysfonts::font_add_google("Open Sans")
 
 # variáveis ---------------------------------------------------------------
 
@@ -39,12 +39,6 @@ vars_shiny <- list(
 
 header <- shinydashboard::dashboardHeader(
   title = tags$a(
-    title = "Abramge",
-    href = "https://www.abramge.com.br/",
-    tags$img(
-      src = "https://abramge.com.br/portal/templates/abramge/images/logo-abramge-55-anos.png",
-      height = 45
-    ), # nome e logo da Abramge
     tags$style(
       type = "text/css",
       ".shiny-output-error { visibility: hidden; }",
@@ -63,71 +57,74 @@ sidebar <- shinydashboard::dashboardSidebar(
 
 # body --------------------------------------------------------------------
 
-# style = "font-size:14px;font-family:'Fira Sans', sans-serif;", # fonte open sans
-
+# style = "font-size:14px; font-family: 'Open Sans', sans-serif; # fonte open sans
 
 body <- shinydashboard::dashboardBody(
   tags$head(
-    tags$link(rel = "stylesheet", type = "text/css", href = "bootstrap_custom.css")
-  ),
-  h2("Procedimentos Médicos e Ambulatoriais", style = "font-family:'Fira Sans', sans-serif;"),
-  shiny::fluidRow(
-    column(
-      width = 2,
-      shiny::selectInput(
-        inputId = "base_procedimentos",
-        label = "Base de procedimentos",
-        selected = NULL,
-        choices = c("Hospitalares", "Ambulatoriais")
-      )
-    ),
-    column(
-      width = 1,
-      shiny::selectInput(
-        inputId = "ano",
-        label = "Ano",
-        selected = NULL,
-        choices = 2018:2020
-      )
-    ),
-    column(
-      width = 5,
-      shiny::selectizeInput(
-        inputId = "procedimento",
-        label = "Procedimento",
-        selected = NULL,
-        choices = NULL
-      )
-    ),
-    column(
-      width = 2,
-      shiny::selectInput(
-        inputId = "categoria",
-        label = "Categoria",
-        selected = NULL,
-        choices = vars_shiny$categoria
-      )
-    ),
-    column(
-      width = 2,
-      shiny::selectInput(
-        inputId = "estatistica",
-        label = "Selecione uma estatística",
-        selected = NULL,
-        choices = vars_shiny$estatistica
+    tags$style(
+      HTML(
+        ".navbar { display: none; }
+        .main-header { display: none; }"
       )
     )
   ),
+  h2("Procedimentos Médicos e Ambulatoriais", style = "font-family: 'Open Sans', sans-serif;"),
   shiny::fluidRow(
-    shiny::downloadButton(
-      outputId = "download_anual",
-      label = "Dados anuais",
-      icon = shiny::icon("download")
+    shiny::column(
+      width = 4,
+      shinydashboard::box(
+        width = NULL,
+        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+        shiny::selectInput(
+          inputId = "base_procedimentos",
+          label = "Base de procedimentos",
+          selected = NULL,
+          choices = c("Hospitalares", "Ambulatoriais")
+        ),
+        shiny::selectizeInput(
+          inputId = "procedimento",
+          label = "Procedimento",
+          selected = NULL,
+          choices = NULL
+        )
+      )
     ),
-    shiny::downloadButton(
-      outputId = "download_mensal",
-      label = "Dados mensais",
-      icon = shiny::icon("download")
+    shiny::column(
+      width = 4,
+      shinydashboard::box(
+        width = NULL,
+        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+        shiny::selectInput(
+          inputId = "ano",
+          label = "Ano",
+          selected = NULL,
+          choices = 2018:2020
+        ),
+        shiny::selectInput(
+          inputId = "categoria",
+          label = "Categoria",
+          selected = NULL,
+          choices = vars_shiny$categoria
+        )
+      )
+    ),
+    shiny::column(
+      width = 4,
+      shinydashboard::box(
+        width = NULL,
+        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+        shiny::selectInput(
+          inputId = "estatistica",
+          label = "Estatística",
+          selected = NULL,
+          choices = vars_shiny$estatistica
+        ),
+        shiny::actionButton(
+          inputId = "busca",
+          label = "Busca",
+          icon = shiny::icon("search")
+        )
+      )
     )
   ),
   shiny::fluidRow(
@@ -151,6 +148,25 @@ body <- shinydashboard::dashboardBody(
         align = "center"
       )
     )
+  ),
+  shiny::fluidRow(
+    shiny::column(
+      width = 3,
+      shinydashboard::box(
+        width = NULL,
+        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+        shiny::downloadButton(
+          outputId = "download_anual",
+          label = "Dados anuais",
+          icon = shiny::icon("download")
+        ),
+        shiny::downloadButton(
+          outputId = "download_mensal",
+          label = "Dados mensais",
+          icon = shiny::icon("download")
+        )
+      )
+    )
   )
 )
 
@@ -165,14 +181,19 @@ ui <- shinydashboard::dashboardPage(
 
 # input <- list(
 #   base_procedimentos = "Hospitalares",
-#   categoria = "Faixa Etária",
-#   estatistica = "Quantidade total",
+#   categoria = "UF",
+#   estatistica = "Valor médio",
 #   procedimento = "CONSULTA EM CONSULTÓRIO (NO HORÁRIO NORMAL OU PREESTABELECIDO)",
 #   ano = "2018"
 # )
 
 server <- function(input, output, session) {
-  dados_anuais <- shiny::reactive({
+
+  option_ano <- shiny::eventReactive(input$busca, {input$ano})
+  option_estatistica <- shiny::eventReactive(input$busca, {input$estatistica})
+  option_categoria <- shiny::eventReactive(input$busca, {input$categoria})
+
+  dados_anuais <- shiny::eventReactive(input$busca, {
     if (input$base_procedimentos == "Hospitalares") {
       dados_anuais <- db |>
         dplyr::filter(db == "hosp")
@@ -196,10 +217,18 @@ server <- function(input, output, session) {
         `Valor total` = tot_vl,
         `Valor médio` = mean_vl
       ) |>
-      dplyr::group_by(cd_procedimento, termo, categoria) |>
-      dplyr::summarise({{ estatistica }} := sum({{ estatistica }})) |>
+      dplyr::group_by(categoria)
+
+    if (input$estatistica %in% c(vars_shiny$estatistica[1:2])) {
+      dados_anuais <- dados_anuais |>
+        dplyr::summarise({{ estatistica }} := sum({{ estatistica }}))
+    } else {
+      dados_anuais <- dados_anuais |>
+        dplyr::summarise({{ estatistica }} := mean({{ estatistica }}))
+    }
+
+    dados_anuais <- dados_anuais |>
       dplyr::ungroup() |>
-      dplyr::select(categoria, {{ estatistica }}) |>
       dplyr::collect()
 
     if (input$categoria == "Faixa Etária") {
@@ -216,7 +245,7 @@ server <- function(input, output, session) {
     return(dados_anuais)
   })
 
-  dados_mensais <- shiny::reactive({
+  dados_mensais <- shiny::eventReactive(input$busca, {
     if (input$base_procedimentos == "Hospitalares") {
       dados_mensais <- db |>
         dplyr::filter(db == "hosp")
@@ -240,14 +269,44 @@ server <- function(input, output, session) {
         `Valor total` = tot_vl,
         `Valor médio` = mean_vl
       ) |>
-      dplyr::group_by(cd_procedimento, termo, categoria, mes_ano) |>
-      dplyr::summarise({{ estatistica }} := sum({{ estatistica }})) |>
+      dplyr::group_by(categoria, mes_ano)
+
+    if (input$estatistica %in% c(vars_shiny$estatistica[1:2])) {
+      dados_mensais <- dados_mensais |>
+        dplyr::summarise({{ estatistica }} := sum({{ estatistica }}))
+    } else {
+      dados_mensais <- dados_mensais |>
+        dplyr::summarise({{ estatistica }} := mean({{ estatistica }}))
+    }
+
+    dados_mensais <- dados_mensais |>
       dplyr::ungroup() |>
-      dplyr::select(categoria, mes_ano, {{ estatistica }}) |>
       dplyr::collect()
 
+    if (input$categoria == "UF") {
+      dados_mensais <- dados_mensais |>
+        dplyr::mutate(
+          categoria = dplyr::case_when(
+            categoria %in% c("AC", "AM", "AP", "PA", "RO", "RR", "TO") ~ "Norte",
+            categoria %in% c("AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE") ~ "Nordeste",
+            categoria %in% c("DF", "GO", "MS", "MT") ~ "Centro-Oeste",
+            categoria %in% c("RS", "SC", "PR") ~ "Sul",
+            TRUE ~ "Sudeste"
+          )
+        ) |>
+        dplyr::group_by(categoria, mes_ano)
+
+      if (input$estatistica %in% c(vars_shiny$estatistica[1:2])) {
+        dados_mensais <- dados_mensais |>
+          dplyr::summarise({{ estatistica }} := sum({{ estatistica }}))
+      } else {
+        dados_mensais <- dados_mensais |>
+          dplyr::summarise({{ estatistica }} := mean({{ estatistica }}))
+      }
+    }
+
     if (input$categoria == "Faixa Etária") {
-      dados_anuais <- dados_anuais |>
+      dados_mensais <- dados_mensais |>
         dplyr::mutate(
           categoria = factor(
             categoria,
@@ -273,7 +332,7 @@ server <- function(input, output, session) {
       ) +
       ggtitle(
         stringr::str_to_upper(
-          glue::glue("{input$estatistica} de procedimentos por {input$categoria} ({input$ano})")
+          glue::glue("{input$estatistica} do procedimento por {input$categoria} ({input$ano})")
         )
       ) +
       theme_minimal() +
@@ -281,8 +340,8 @@ server <- function(input, output, session) {
       theme(
         legend.position = "none",
         text = element_text(
-          size = 13,
-          family = "Fira Sans"
+          size = 10,
+          family = "Open Sans"
         ),
         plot.title = element_text(
           face = "bold",
@@ -337,7 +396,7 @@ server <- function(input, output, session) {
         legend.position = "right",
         text = element_text(
           size = 10,
-          family = "Fira Sans"
+          family = "Open Sans"
         ),
         plot.title = element_text(
           face = "bold",
@@ -347,7 +406,7 @@ server <- function(input, output, session) {
       ggtitle(
         stringr::str_to_upper(
           glue::glue(
-            "{input$estatistica} de procedimentos por {input$categoria} ({input$ano})"
+            "{input$estatistica} do procedimento por {input$categoria} ({input$ano})"
           )
         )
       )
@@ -369,20 +428,20 @@ server <- function(input, output, session) {
           group = names(dados_mensais())[1],
           color = names(dados_mensais())[1]
         ),
-        size = 1
+        size = 0.5
       ) +
       labs(
         x = "",
         y = input$estatistica,
-        color = input$categoria
+        color = ifelse(input$categoria == "UF", "Região", input$categoria)
       ) +
       theme_minimal() +
       theme(
         legend.position = "right",
         legend.title = element_blank(),
         text = element_text(
-          size = 13,
-          family = "Fira Sans"
+          size = 10,
+          family = "Open Sans"
         ),
         plot.title = element_text(
           face = "bold",
@@ -390,14 +449,14 @@ server <- function(input, output, session) {
         )
       ) +
       scale_color_manual(values = MetBrewer::met.brewer(
-        name = "Hokusai3",
-        n = 27,
+        name = "Hokusai2",
+        n = 13,
         type = "continuous"
       )) +
       ggtitle(
         stringr::str_to_upper(
           glue::glue(
-            "{input$estatistica} de procedimentos por {input$categoria} (jan - dez/{input$ano})"
+            "{input$estatistica} do procedimento por região (jan - dez/{input$ano})"
           )
         )
       )
