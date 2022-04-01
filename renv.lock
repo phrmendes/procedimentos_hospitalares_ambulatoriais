@@ -548,16 +548,6 @@
         "vctrs"
       ]
     },
-    "duckdb": {
-      "Package": "duckdb",
-      "Version": "0.3.1-1",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "209719c79ec850e02212a54c23995b9d",
-      "Requirements": [
-        "DBI"
-      ]
-    },
     "e1071": {
       "Package": "e1071",
       "Version": "1.7-9",
@@ -2164,6 +2154,14 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "d6bc0432436a0aefbf29d5de8588b876",
+      "Requirements": []
+    },
+    "writexl": {
+      "Package": "writexl",
+      "Version": "1.4.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "edd181b6e10c87497db16d1f8c0d4ed5",
       "Requirements": []
     },
     "xfun": {

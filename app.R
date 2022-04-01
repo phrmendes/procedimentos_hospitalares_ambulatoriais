@@ -179,19 +179,16 @@ ui <- shinydashboard::dashboardPage(
 
 # server ------------------------------------------------------------------
 
-# input <- list(
-#   base_procedimentos = "Hospitalares",
-#   categoria = "UF",
-#   estatistica = "Valor médio",
-#   procedimento = "CONSULTA EM CONSULTÓRIO (NO HORÁRIO NORMAL OU PREESTABELECIDO)",
-#   ano = "2018"
-# )
-
 server <- function(input, output, session) {
-
-  option_ano <- shiny::eventReactive(input$busca, {input$ano})
-  option_estatistica <- shiny::eventReactive(input$busca, {input$estatistica})
-  option_categoria <- shiny::eventReactive(input$busca, {input$categoria})
+  option_ano <- shiny::eventReactive(input$busca, {
+    input$ano
+  })
+  option_estatistica <- shiny::eventReactive(input$busca, {
+    input$estatistica
+  })
+  option_categoria <- shiny::eventReactive(input$busca, {
+    input$categoria
+  })
 
   dados_anuais <- shiny::eventReactive(input$busca, {
     if (input$base_procedimentos == "Hospitalares") {
