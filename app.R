@@ -72,8 +72,10 @@ body <- shinydashboard::dashboardBody(
   ),
   h2("Procedimentos Médicos e Ambulatoriais", style = "font-family:'Fira Sans', sans-serif;"),
   shiny::fluidRow(
+    width = 12,
     column(
       width = 2,
+      align = "center",
       shiny::selectInput(
         inputId = "base_procedimentos",
         label = "Base de procedimentos",
@@ -82,7 +84,8 @@ body <- shinydashboard::dashboardBody(
       )
     ),
     column(
-      width = 1,
+      width = 2,
+      align = "center",
       shiny::selectInput(
         inputId = "ano",
         label = "Ano",
@@ -91,7 +94,8 @@ body <- shinydashboard::dashboardBody(
       )
     ),
     column(
-      width = 5,
+      width = 4,
+      align = "center",
       shiny::selectizeInput(
         inputId = "procedimento",
         label = "Procedimento",
@@ -101,6 +105,7 @@ body <- shinydashboard::dashboardBody(
     ),
     column(
       width = 2,
+      align = "center",
       shiny::selectInput(
         inputId = "categoria",
         label = "Categoria",
@@ -110,13 +115,23 @@ body <- shinydashboard::dashboardBody(
     ),
     column(
       width = 2,
+      align = "center",
       shiny::selectInput(
         inputId = "estatistica",
         label = "Selecione uma estatística",
         selected = NULL,
         choices = vars_shiny$estatistica
       )
-    )
+    )#,
+    # column(
+    #   width = 2,
+    #   align = "center",
+    #   shiny::actionButton(
+    #     inputId = "botao",
+    #     label = "Busca",
+    #     icon = shiny::icon("fa-circle-dot")
+    #   )
+    # )
   ),
   shiny::fluidRow(
     shiny::downloadButton(
