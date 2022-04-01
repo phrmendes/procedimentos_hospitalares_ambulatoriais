@@ -57,8 +57,6 @@ sidebar <- shinydashboard::dashboardSidebar(
 
 # body --------------------------------------------------------------------
 
-# style = "font-size:14px; font-family: 'Open Sans', sans-serif; # fonte open sans
-
 body <- shinydashboard::dashboardBody(
   tags$head(
     tags$style(
@@ -141,7 +139,7 @@ body <- shinydashboard::dashboardBody(
   ),
   shiny::fluidRow(
     shiny::conditionalPanel(
-      condition = "input.categoria == 'UF'",
+      condition = "input.categoria == 'UF' && input.button != 0",
       shinydashboard::box(
         shinycssloaders::withSpinner(plotly::plotlyOutput("map")),
         width = 4,
@@ -180,18 +178,14 @@ ui <- shinydashboard::dashboardPage(
 # server ------------------------------------------------------------------
 
 server <- function(input, output, session) {
-  option_ano <- shiny::eventReactive(input$busca, {
-    input$ano
-  })
-  option_estatistica <- shiny::eventReactive(input$busca, {
-    input$estatistica
-  })
-  option_categoria <- shiny::eventReactive(input$busca, {
-    input$categoria
-  })
+  option_base_procedimentos <- shiny::eventReactive(input$busca, {input$base_procedimentos})
+  option_procedimento <- shiny::eventReactive(input$busca, {input$procedimento})
+  option_ano <- shiny::eventReactive(input$busca, {input$ano})
+  option_estatistica <- shiny::eventReactive(input$busca, {input$estatistica})
+  option_categoria <- shiny::eventReactive(input$busca, {input$categoria})
 
-  dados_anuais <- shiny::eventReactive(input$busca, {
-    if (input$base_procedimentos == "Hospitalares") {
+  dados_anuais <- shiny::reactive({
+    if (option_base_procedimentos() == "Hospitalares") {
       dados_anuais <- db |>
         dplyr::filter(db == "hosp")
     } else {
@@ -199,14 +193,14 @@ server <- function(input, output, session) {
         dplyr::filter(db == "amb")
     }
 
-    estatistica <- as.symbol(input$estatistica)
+    estatistica <- as.symbol(option_estatistica())
 
-    periodo <- paste0("1-", 1:12, "-", input$ano)
+    periodo <- paste0("1-", 1:12, "-", option_ano())
 
     dados_anuais <- dados_anuais |>
       dplyr::filter(
-        tipo == stringr::str_to_lower(input$categoria),
-        termo == input$procedimento,
+        tipo == stringr::str_to_lower(option_categoria()),
+        termo == option_procedimento(),
         mes_ano %in% periodo
       ) |>
       dplyr::rename(
@@ -216,7 +210,7 @@ server <- function(input, output, session) {
       ) |>
       dplyr::group_by(categoria)
 
-    if (input$estatistica %in% c(vars_shiny$estatistica[1:2])) {
+    if (option_estatistica() %in% c(vars_shiny$estatistica[1:2])) {
       dados_anuais <- dados_anuais |>
         dplyr::summarise({{ estatistica }} := sum({{ estatistica }}))
     } else {
@@ -228,7 +222,7 @@ server <- function(input, output, session) {
       dplyr::ungroup() |>
       dplyr::collect()
 
-    if (input$categoria == "Faixa Etária") {
+    if (option_categoria() == "Faixa Etária") {
       dados_anuais <- dados_anuais |>
         dplyr::mutate(
           categoria = factor(
@@ -242,8 +236,8 @@ server <- function(input, output, session) {
     return(dados_anuais)
   })
 
-  dados_mensais <- shiny::eventReactive(input$busca, {
-    if (input$base_procedimentos == "Hospitalares") {
+  dados_mensais <- shiny::reactive({
+    if (option_base_procedimentos() == "Hospitalares") {
       dados_mensais <- db |>
         dplyr::filter(db == "hosp")
     } else {
@@ -251,14 +245,14 @@ server <- function(input, output, session) {
         dplyr::filter(db == "amb")
     }
 
-    periodo <- paste0("1-", 1:12, "-", input$ano)
+    periodo <- paste0("1-", 1:12, "-", option_ano())
 
-    estatistica <- as.symbol(input$estatistica)
+    estatistica <- as.symbol(option_estatistica())
 
     dados_mensais <- dados_mensais |>
       dplyr::filter(
-        tipo == stringr::str_to_lower(input$categoria),
-        termo == input$procedimento,
+        tipo == stringr::str_to_lower(option_categoria()),
+        termo == option_procedimento(),
         mes_ano %in% periodo
       ) |>
       dplyr::rename(
@@ -268,7 +262,7 @@ server <- function(input, output, session) {
       ) |>
       dplyr::group_by(categoria, mes_ano)
 
-    if (input$estatistica %in% c(vars_shiny$estatistica[1:2])) {
+    if (option_estatistica() %in% c(vars_shiny$estatistica[1:2])) {
       dados_mensais <- dados_mensais |>
         dplyr::summarise({{ estatistica }} := sum({{ estatistica }}))
     } else {
@@ -280,7 +274,7 @@ server <- function(input, output, session) {
       dplyr::ungroup() |>
       dplyr::collect()
 
-    if (input$categoria == "UF") {
+    if (option_categoria() == "UF") {
       dados_mensais <- dados_mensais |>
         dplyr::mutate(
           categoria = dplyr::case_when(
@@ -293,7 +287,7 @@ server <- function(input, output, session) {
         ) |>
         dplyr::group_by(categoria, mes_ano)
 
-      if (input$estatistica %in% c(vars_shiny$estatistica[1:2])) {
+      if (option_estatistica() %in% c(vars_shiny$estatistica[1:2])) {
         dados_mensais <- dados_mensais |>
           dplyr::summarise({{ estatistica }} := sum({{ estatistica }}))
       } else {
@@ -302,7 +296,7 @@ server <- function(input, output, session) {
       }
     }
 
-    if (input$categoria == "Faixa Etária") {
+    if (option_categoria() == "Faixa Etária") {
       dados_mensais <- dados_mensais |>
         dplyr::mutate(
           categoria = factor(
@@ -329,11 +323,11 @@ server <- function(input, output, session) {
       ) +
       ggtitle(
         stringr::str_to_upper(
-          glue::glue("{input$estatistica} do procedimento por {input$categoria} ({input$ano})")
+          glue::glue("{option_estatistica()} do procedimento por {option_categoria()} ({option_ano()})")
         )
       ) +
       theme_minimal() +
-      xlab(glue::glue("{input$categoria}")) +
+      xlab(glue::glue("{option_categoria()}")) +
       theme(
         legend.position = "none",
         text = element_text(
@@ -403,7 +397,7 @@ server <- function(input, output, session) {
       ggtitle(
         stringr::str_to_upper(
           glue::glue(
-            "{input$estatistica} do procedimento por {input$categoria} ({input$ano})"
+            "{option_estatistica()} do procedimento por {option_categoria()} ({option_ano()})"
           )
         )
       )
@@ -429,8 +423,8 @@ server <- function(input, output, session) {
       ) +
       labs(
         x = "",
-        y = input$estatistica,
-        color = ifelse(input$categoria == "UF", "Região", input$categoria)
+        y = option_estatistica(),
+        color = ifelse(option_categoria() == "UF", "Região", option_categoria())
       ) +
       theme_minimal() +
       theme(
@@ -453,7 +447,7 @@ server <- function(input, output, session) {
       ggtitle(
         stringr::str_to_upper(
           glue::glue(
-            "{input$estatistica} do procedimento por região (jan - dez/{input$ano})"
+            "{option_estatistica()} do procedimento por região (jan - dez/{option_ano()})"
           )
         )
       )
@@ -463,7 +457,7 @@ server <- function(input, output, session) {
 
   output$download_anual <- shiny::downloadHandler(
     filename = function() {
-      glue::glue("dados_{janitor::make_clean_names(input$base_procedimentos)}_{janitor::make_clean_names(input$categoria)}_{janitor::make_clean_names(input$estatistica)}_{input$ano}.xlsx")
+      glue::glue("dados_{janitor::make_clean_names(option_base_procedimentos())}_{janitor::make_clean_names(option_categoria())}_{janitor::make_clean_names(option_estatistica())}_{option_ano()}.xlsx")
     },
     content = function(file) {
       writexl::write_xlsx(dados_anuais(), file)
@@ -472,7 +466,7 @@ server <- function(input, output, session) {
 
   output$download_mensal <- shiny::downloadHandler(
     filename = function() {
-      glue::glue("dados_mensais_{janitor::make_clean_names(input$base_procedimentos)}_{janitor::make_clean_names(input$categoria)}_{janitor::make_clean_names(input$estatistica)}_{input$ano}.xlsx")
+      glue::glue("dados_mensais_{janitor::make_clean_names(option_base_procedimentos())}_{janitor::make_clean_names(option_categoria())}_{janitor::make_clean_names(option_estatistica())}_{option_ano()}.xlsx")
     },
     content = function(file) {
       writexl::write_xlsx(dados_mensais(), file)
