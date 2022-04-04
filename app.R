@@ -126,6 +126,12 @@ body <- shinydashboard::dashboardBody(
     )
   ),
   shiny::fluidRow(
+    shinydashboard::infoBoxOutput("proc"),
+    shinydashboard::infoBoxOutput("qtd_tot"),
+    shinydashboard::infoBoxOutput("vl_tot"),
+    shinydashboard::infoBoxOutput("mean")
+  ),
+  shiny::fluidRow(
     shinydashboard::box(
       shinycssloaders::withSpinner(plotly::plotlyOutput("bar")),
       width = 6,
@@ -178,27 +184,34 @@ ui <- shinydashboard::dashboardPage(
 # server ------------------------------------------------------------------
 
 server <- function(input, output, session) {
+
+  # reactive variables ----------------------------------------------------
+
   option_base_procedimentos <- shiny::eventReactive(input$busca, {input$base_procedimentos})
   option_procedimento <- shiny::eventReactive(input$busca, {input$procedimento})
   option_ano <- shiny::eventReactive(input$busca, {input$ano})
   option_estatistica <- shiny::eventReactive(input$busca, {input$estatistica})
   option_categoria <- shiny::eventReactive(input$busca, {input$categoria})
-
-  dados_anuais <- shiny::reactive({
+  option_db <- shiny::reactive({
     if (option_base_procedimentos() == "Hospitalares") {
-      dados_anuais <- db |>
-        dplyr::filter(db == "hosp")
+      db <- "hosp"
     } else {
-      dados_anuais <- db |>
-        dplyr::filter(db == "amb")
+      db <- "amb"
     }
 
+    return(db)
+  })
+
+  # dados anuais ----------------------------------------------------------
+
+  dados_anuais <- shiny::reactive({
     estatistica <- as.symbol(option_estatistica())
 
     periodo <- paste0("1-", 1:12, "-", option_ano())
 
-    dados_anuais <- dados_anuais |>
+    dados_anuais <- db |>
       dplyr::filter(
+        db == option_db(),
         tipo == stringr::str_to_lower(option_categoria()),
         termo == option_procedimento(),
         mes_ano %in% periodo
@@ -233,24 +246,21 @@ server <- function(input, output, session) {
         dplyr::arrange(categoria)
     }
 
+    gc()
+
     return(dados_anuais)
   })
 
-  dados_mensais <- shiny::reactive({
-    if (option_base_procedimentos() == "Hospitalares") {
-      dados_mensais <- db |>
-        dplyr::filter(db == "hosp")
-    } else {
-      dados_mensais <- db |>
-        dplyr::filter(db == "amb")
-    }
+  # dados mensais ---------------------------------------------------------
 
+  dados_mensais <- shiny::reactive({
     periodo <- paste0("1-", 1:12, "-", option_ano())
 
     estatistica <- as.symbol(option_estatistica())
 
-    dados_mensais <- dados_mensais |>
+    dados_mensais <- db |>
       dplyr::filter(
+        db == option_db(),
         tipo == stringr::str_to_lower(option_categoria()),
         termo == option_procedimento(),
         mes_ano %in% periodo
@@ -307,8 +317,78 @@ server <- function(input, output, session) {
         dplyr::arrange(categoria)
     }
 
+    gc()
+
     return(dados_mensais)
   })
+
+  # info boxes ------------------------------------------------------------
+
+  output$proc <- shinydashboard::renderInfoBox({
+    periodo <- paste0("1-1-", option_ano())
+
+    n <- termos |>
+      dplyr::filter(ano == periodo & db == option_db()) |>
+      dplyr::collect() |>
+      dplyr::tally() |>
+      dplyr::pull()
+
+    shinydashboard::infoBox(
+      title = "Número de procedimentos disponíveis:",
+      value = n,
+      icon = shiny::icon("chart-bar"),
+      color = "blue"
+    )
+  })
+
+  output$qtd_tot <- shinydashboard::renderInfoBox({
+    periodo <- paste0("1-1-", input$ano)
+
+    db |>
+      dplyr::filter(ano %in% periodo & termo == input$procedimento)
+
+    qtd_tot <- dados_anuais() |>
+      dplyr::ungroup() |>
+      dplyr::summarise(sum(`Quantidade total`)) |>
+      dplyr::pull()
+
+    shinydashboard::infoBox(
+      title = "Quantidade total do procedimento:",
+      value = qtd_tot,
+      icon = shiny::icon("chart-bar"),
+      color = "yellow"
+    )
+  })
+
+  output$vl_tot <- shinydashboard::renderInfoBox({
+    vl_tot <- dados_anuais() |>
+      dplyr::ungroup() |>
+      dplyr::summarise(sum(`Valor total`)) |>
+      dplyr::pull()
+
+    shinydashboard::infoBox(
+      title = "Valor total de procedimento:",
+      value = vl_tot,
+      icon = shiny::icon("chart-bar"),
+      color = "blue"
+    )
+  })
+
+  output$mean <- shinydashboard::renderInfoBox({
+    mean <- dados_anuais() |>
+      dplyr::ungroup() |>
+      dplyr::summarise(sum(`Valor médio`)) |>
+      dplyr::pull()
+
+    shinydashboard::infoBox(
+      title = glue::glue("Valor médio do procedimento:"),
+      value = mean,
+      icon = shiny::icon("bar-chart"),
+      color = "yellow"
+    )
+  })
+
+  # bar plot --------------------------------------------------------------
 
   output$bar <- plotly::renderPlotly({
     plot_bar <- dados_anuais() |>
@@ -347,6 +427,8 @@ server <- function(input, output, session) {
 
     plotly::ggplotly(plot_bar)
   })
+
+  # map plot --------------------------------------------------------------
 
   output$map <- plotly::renderPlotly({
     plot_map <- geom_ufs |>
@@ -405,6 +487,8 @@ server <- function(input, output, session) {
     plotly::ggplotly(plot_map)
   })
 
+  # time series per region plot -------------------------------------------
+
   output$ts <- plotly::renderPlotly({
     plot_line <- dados_mensais() |>
       dplyr::mutate(
@@ -455,9 +539,11 @@ server <- function(input, output, session) {
     plotly::ggplotly(plot_line)
   })
 
+  # downloads -------------------------------------------------------------
+
   output$download_anual <- shiny::downloadHandler(
     filename = function() {
-      glue::glue("dados_{janitor::make_clean_names(option_base_procedimentos())}_{janitor::make_clean_names(option_categoria())}_{janitor::make_clean_names(option_estatistica())}_{option_ano()}.xlsx")
+      glue::glue("dados_{option_db()}_{janitor::make_clean_names(option_categoria())}_{janitor::make_clean_names(option_estatistica())}_{option_ano()}.xlsx")
     },
     content = function(file) {
       writexl::write_xlsx(dados_anuais(), file)
@@ -466,14 +552,14 @@ server <- function(input, output, session) {
 
   output$download_mensal <- shiny::downloadHandler(
     filename = function() {
-      glue::glue("dados_mensais_{janitor::make_clean_names(option_base_procedimentos())}_{janitor::make_clean_names(option_categoria())}_{janitor::make_clean_names(option_estatistica())}_{option_ano()}.xlsx")
+      glue::glue("dados_mensais_{option_db()}_{janitor::make_clean_names(option_categoria())}_{janitor::make_clean_names(option_estatistica())}_{option_ano()}.xlsx")
     },
     content = function(file) {
       writexl::write_xlsx(dados_mensais(), file)
     }
   )
 
-  # opções server-side
+  # server-side options ---------------------------------------------------
 
   shiny::observe({
     if (input$base_procedimentos == "Hospitalares") {
