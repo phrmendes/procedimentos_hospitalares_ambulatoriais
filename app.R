@@ -126,10 +126,10 @@ body <- shinydashboard::dashboardBody(
     )
   ),
   shiny::fluidRow(
-    shinydashboard::infoBoxOutput("proc"),
-    shinydashboard::infoBoxOutput("qtd_tot"),
-    shinydashboard::infoBoxOutput("vl_tot"),
-    shinydashboard::infoBoxOutput("mean")
+    shinydashboard::infoBoxOutput(width = 3, "proc"),
+    shinydashboard::infoBoxOutput(width = 3, "qtd_tot"),
+    shinydashboard::infoBoxOutput(width = 3, "vl_tot"),
+    shinydashboard::infoBoxOutput(width = 3, "mean")
   ),
   shiny::fluidRow(
     shinydashboard::box(
@@ -147,8 +147,9 @@ body <- shinydashboard::dashboardBody(
     shiny::conditionalPanel(
       condition = "input.categoria == 'UF' && input.button != 0",
       shinydashboard::box(
+        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
         shinycssloaders::withSpinner(plotly::plotlyOutput("map")),
-        width = 4,
+        width = 6,
         align = "center"
       )
     )
@@ -187,13 +188,32 @@ server <- function(input, output, session) {
 
   # reactive variables ----------------------------------------------------
 
-  option_base_procedimentos <- shiny::eventReactive(input$busca, {input$base_procedimentos})
-  option_procedimento <- shiny::eventReactive(input$busca, {input$procedimento})
-  option_ano <- shiny::eventReactive(input$busca, {input$ano})
-  option_estatistica <- shiny::eventReactive(input$busca, {input$estatistica})
-  option_categoria <- shiny::eventReactive(input$busca, {input$categoria})
+  option_base_procedimentos <- shiny::eventReactive(input$busca, {
+    input$base_procedimentos
+  })
+  option_procedimento <- shiny::eventReactive(input$busca, {
+    input$procedimento
+  })
+  option_ano <- shiny::eventReactive(input$busca, {
+    input$ano
+  })
+  option_estatistica <- shiny::eventReactive(input$busca, {
+    input$estatistica
+  })
+  option_categoria <- shiny::eventReactive(input$busca, {
+    input$categoria
+  })
   option_db <- shiny::reactive({
     if (option_base_procedimentos() == "Hospitalares") {
+      db <- "hosp"
+    } else {
+      db <- "amb"
+    }
+
+    return(db)
+  })
+  input_db <- shiny::reactive({
+    if (input$base_procedimentos == "Hospitalares") {
       db <- "hosp"
     } else {
       db <- "amb"
@@ -325,35 +345,58 @@ server <- function(input, output, session) {
   # info boxes ------------------------------------------------------------
 
   output$proc <- shinydashboard::renderInfoBox({
-    periodo <- paste0("1-1-", option_ano())
+    periodo <- paste0("1-1-", input$ano)
 
     n <- termos |>
-      dplyr::filter(ano == periodo & db == option_db()) |>
+      dplyr::filter(ano == periodo & db == input_db()) |>
+      dplyr::summarise(n = n()) |>
       dplyr::collect() |>
-      dplyr::tally() |>
       dplyr::pull()
 
     shinydashboard::infoBox(
-      title = "Número de procedimentos disponíveis:",
-      value = n,
+      title = shiny::HTML("Nº de procedimentos <br/> disponíveis na base:"),
+      value = prettyNum(n, big.mark = "\\."),
       icon = shiny::icon("chart-bar"),
       color = "blue"
     )
   })
 
   output$qtd_tot <- shinydashboard::renderInfoBox({
-    periodo <- paste0("1-1-", input$ano)
+    periodo <- paste0("1-", 1:12, "-", input$ano)
 
-    db |>
-      dplyr::filter(ano %in% periodo & termo == input$procedimento)
-
-    qtd_tot <- dados_anuais() |>
-      dplyr::ungroup() |>
-      dplyr::summarise(sum(`Quantidade total`)) |>
+    qtd_tot <- db |>
+      dplyr::filter(
+        mes_ano %in% periodo,
+        termo == input$procedimento,
+        db == input_db(),
+        tipo == "sexo"
+      ) |>
+      dplyr::summarise(tot_qt = sum(tot_qt)) |>
+      dplyr::collect() |>
       dplyr::pull()
 
+    qtd_tot_pretty <- prettyNum(qtd_tot, big.mark = "\\.", decimal.mark = ",")
+
+    n_dots <- stringr::str_count(qtd_tot_pretty, "\\.")
+
+    if (n_dots >= 3) {
+      qtd_tot <- prettyNum(round(qtd_tot / 10^9, 2), big.mark = "\\.", decimal.mark = ",")
+
+      qtd_tot <- glue::glue("{qtd_tot} bilhões")
+    } else if (n_dots < 3 & n_dots >= 2) {
+      qtd_tot <- prettyNum(round(qtd_tot / 10^6, 2), big.mark = "\\.", decimal.mark = ",")
+
+      qtd_tot <- glue::glue("{qtd_tot} milhões")
+    } else if (n_dots < 2 & n_dots >= 1) {
+      qtd_tot <- prettyNum(round(qtd_tot / 10^3, 2), big.mark = "\\.", decimal.mark = ",")
+
+      qtd_tot <- glue::glue("{qtd_tot} mil")
+    } else {
+      qtd_tot <- glue::glue("{qtd_tot}")
+    }
+
     shinydashboard::infoBox(
-      title = "Quantidade total do procedimento:",
+      title = shiny::HTML("Procedimentos realizados <br/> durante o ano:"),
       value = qtd_tot,
       icon = shiny::icon("chart-bar"),
       color = "yellow"
@@ -361,13 +404,41 @@ server <- function(input, output, session) {
   })
 
   output$vl_tot <- shinydashboard::renderInfoBox({
-    vl_tot <- dados_anuais() |>
-      dplyr::ungroup() |>
-      dplyr::summarise(sum(`Valor total`)) |>
+    periodo <- paste0("1-", 1:12, "-", input$ano)
+
+    vl_tot <- db |>
+      dplyr::filter(
+        mes_ano %in% periodo,
+        termo == input$procedimento,
+        db == input_db(),
+        tipo == "sexo"
+      ) |>
+      dplyr::summarise(vl_tot = sum(tot_vl)) |>
+      dplyr::collect() |>
       dplyr::pull()
 
+    vl_tot_pretty <- prettyNum(vl_tot, big.mark = "\\.", decimal.mark = ",")
+
+    n_dots <- stringr::str_count(vl_tot_pretty, "\\.")
+
+    if (n_dots >= 3) {
+      vl_tot <- prettyNum(round(vl_tot / 10^9, 2), big.mark = "\\.", decimal.mark = ",")
+
+      vl_tot <- glue::glue("R$ {vl_tot} bilhões")
+    } else if (n_dots < 3 & n_dots >= 2) {
+      vl_tot <- prettyNum(round(vl_tot / 10^6, 2), big.mark = "\\.", decimal.mark = ",")
+
+      vl_tot <- glue::glue("R$ {vl_tot} milhões")
+    } else if (n_dots < 2 & n_dots >= 1) {
+      vl_tot <- prettyNum(round(vl_tot / 10^3, 2), big.mark = "\\.", decimal.mark = ",")
+
+      vl_tot <- glue::glue("R$ {vl_tot} mil")
+    } else {
+      vl_tot <- glue::glue("R$ {vl_tot}")
+    }
+
     shinydashboard::infoBox(
-      title = "Valor total de procedimento:",
+      title = shiny::HTML("Valor total <br/> dos procedimentos:"),
       value = vl_tot,
       icon = shiny::icon("chart-bar"),
       color = "blue"
@@ -375,15 +446,25 @@ server <- function(input, output, session) {
   })
 
   output$mean <- shinydashboard::renderInfoBox({
-    mean <- dados_anuais() |>
-      dplyr::ungroup() |>
-      dplyr::summarise(sum(`Valor médio`)) |>
+    periodo <- paste0("1-", 1:12, "-", input$ano)
+
+    mean <- db |>
+      dplyr::filter(
+        mes_ano %in% periodo,
+        termo == input$procedimento,
+        db == input_db(),
+        tipo == "sexo"
+      ) |>
+      dplyr::summarise(mean = mean(mean_vl)) |>
+      dplyr::collect() |>
       dplyr::pull()
 
+    mean <- prettyNum(round(mean, 2), big.mark = "\\.", decimal.mark = ",")
+
     shinydashboard::infoBox(
-      title = glue::glue("Valor médio do procedimento:"),
-      value = mean,
-      icon = shiny::icon("bar-chart"),
+      title = shiny::HTML("Valor médio nacional <br/> do procedimento:"),
+      value = glue::glue("R$ {mean}"),
+      icon = shiny::icon("chart-bar"),
       color = "yellow"
     )
   })
