@@ -11,7 +11,7 @@ COPY app.R /home/shiny
 
 COPY output/* /home/shiny/output
 
-RUN Rscript -e 'install.packages(c("tidyverse", "glue", "shinydashboard", "plotly", "MetBrewer", "shiny", "sf", "arrow", "tmaptools"))'
+RUN Rscript -e 'install.packages(c("tidyverse", "glue", "bs4Dash", "plotly", "MetBrewer", "shiny", "shinydashboard", "sf", "arrow", "memoise", "tmaptools", "rlang", "shinycssloaders", "sysfonts", "writexl", "geobr")'
 
 RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen \
    && locale-gen en_US.utf8 \

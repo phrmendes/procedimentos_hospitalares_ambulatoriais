@@ -6,17 +6,20 @@
 
 library(tidyverse)
 library(glue)
-library(shinydashboard)
+library(bs4Dash)
 library(plotly)
 library(MetBrewer)
 library(shiny)
+library(shinydashboard)
 library(sf)
 library(arrow)
+library(memoise)
 library(tmaptools)
 library(rlang)
 library(shinycssloaders)
-library(showtext)
+library(sysfonts)
 library(writexl)
+library(geobr)
 
 options(scipen = 999)
 options(dplyr.summarise.inform = FALSE)
@@ -37,7 +40,7 @@ vars_shiny <- list(
 
 # header ------------------------------------------------------------------
 
-header <- shinydashboard::dashboardHeader(
+header <- bs4Dash::dashboardHeader(
   title = tags$a(
     tags$style(
       type = "text/css",
@@ -49,15 +52,15 @@ header <- shinydashboard::dashboardHeader(
 
 # sidebar -----------------------------------------------------------------
 
-sidebar <- shinydashboard::dashboardSidebar(
+sidebar <- bs4Dash::dashboardSidebar(
   disable = TRUE,
   collapsed = TRUE,
-  shinydashboard::sidebarMenu()
+  bs4Dash::sidebarMenu()
 )
 
 # body --------------------------------------------------------------------
 
-body <- shinydashboard::dashboardBody(
+body <- bs4Dash::dashboardBody(
   tags$head(
     tags$style(
       HTML(
@@ -70,8 +73,9 @@ body <- shinydashboard::dashboardBody(
   shiny::fluidRow(
     shiny::column(
       width = 4,
-      shinydashboard::box(
+      bs4Dash::box(
         width = NULL,
+        collapsible = FALSE,
         style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
         shiny::selectInput(
           inputId = "base_procedimentos",
@@ -89,8 +93,9 @@ body <- shinydashboard::dashboardBody(
     ),
     shiny::column(
       width = 4,
-      shinydashboard::box(
+      bs4Dash::box(
         width = NULL,
+        collapsible = FALSE,
         style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
         shiny::selectInput(
           inputId = "ano",
@@ -108,8 +113,9 @@ body <- shinydashboard::dashboardBody(
     ),
     shiny::column(
       width = 4,
-      shinydashboard::box(
+      bs4Dash::box(
         width = NULL,
+        collapsible = FALSE,
         style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
         shiny::selectInput(
           inputId = "estatistica",
@@ -126,18 +132,20 @@ body <- shinydashboard::dashboardBody(
     )
   ),
   shiny::fluidRow(
-    shinydashboard::infoBoxOutput(width = 3, "proc"),
-    shinydashboard::infoBoxOutput(width = 3, "qtd_tot"),
-    shinydashboard::infoBoxOutput(width = 3, "vl_tot"),
-    shinydashboard::infoBoxOutput(width = 3, "mean")
+    bs4Dash::infoBoxOutput(width = 3, "proc"),
+    bs4Dash::infoBoxOutput(width = 3, "qtd_tot"),
+    bs4Dash::infoBoxOutput(width = 3, "vl_tot"),
+    bs4Dash::infoBoxOutput(width = 3, "mean")
   ),
   shiny::fluidRow(
-    shinydashboard::box(
+    bs4Dash::box(
+      collapsible = FALSE,
       shinycssloaders::withSpinner(plotly::plotlyOutput("bar")),
       width = 6,
       align = "center"
     ),
-    shinydashboard::box(
+    bs4Dash::box(
+      collapsible = FALSE,
       shinycssloaders::withSpinner(plotly::plotlyOutput("ts")),
       width = 6,
       align = "center"
@@ -146,10 +154,10 @@ body <- shinydashboard::dashboardBody(
   shiny::fluidRow(
     shiny::conditionalPanel(
       condition = "input.categoria == 'UF' && input.button != 0",
-      shinydashboard::box(
-        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+      bs4Dash::box(
+        collapsible = FALSE,
         shinycssloaders::withSpinner(plotly::plotlyOutput("map")),
-        width = 6,
+        width = 12,
         align = "center"
       )
     )
@@ -157,9 +165,10 @@ body <- shinydashboard::dashboardBody(
   shiny::fluidRow(
     shiny::column(
       width = 3,
-      shinydashboard::box(
+      bs4Dash::box(
         width = NULL,
-        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+        collapsible = FALSE,
+        align = "center",
         shiny::downloadButton(
           outputId = "download_anual",
           label = "Dados anuais",
@@ -177,7 +186,7 @@ body <- shinydashboard::dashboardBody(
 
 # ui ----------------------------------------------------------------------
 
-ui <- shinydashboard::dashboardPage(
+ui <- bs4Dash::dashboardPage(
   title = "Abramge", # título da aba do dashboard
   header, sidebar, body
 )
@@ -255,17 +264,6 @@ server <- function(input, output, session) {
       dplyr::ungroup() |>
       dplyr::collect()
 
-    if (option_categoria() == "Faixa Etária") {
-      dados_anuais <- dados_anuais |>
-        dplyr::mutate(
-          categoria = factor(
-            categoria,
-            levels = c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
-          )
-        ) |>
-        dplyr::arrange(categoria)
-    }
-
     gc()
 
     return(dados_anuais)
@@ -326,17 +324,6 @@ server <- function(input, output, session) {
       }
     }
 
-    if (option_categoria() == "Faixa Etária") {
-      dados_mensais <- dados_mensais |>
-        dplyr::mutate(
-          categoria = factor(
-            categoria,
-            levels = c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
-          )
-        ) |>
-        dplyr::arrange(categoria)
-    }
-
     gc()
 
     return(dados_mensais)
@@ -344,7 +331,7 @@ server <- function(input, output, session) {
 
   # info boxes ------------------------------------------------------------
 
-  output$proc <- shinydashboard::renderInfoBox({
+  output$proc <- bs4Dash::renderInfoBox({
     periodo <- paste0("1-1-", input$ano)
 
     n <- termos |>
@@ -353,15 +340,15 @@ server <- function(input, output, session) {
       dplyr::collect() |>
       dplyr::pull()
 
-    shinydashboard::infoBox(
-      title = shiny::HTML("Nº de procedimentos <br/> disponíveis na base:"),
+    bs4Dash::infoBox(
+      title = shiny::HTML("Nº de procedimentos disponíveis na base:"),
       value = prettyNum(n, big.mark = "\\."),
       icon = shiny::icon("chart-bar"),
-      color = "blue"
+      color = "warning"
     )
   })
 
-  output$qtd_tot <- shinydashboard::renderInfoBox({
+  output$qtd_tot <- bs4Dash::renderInfoBox({
     periodo <- paste0("1-", 1:12, "-", input$ano)
 
     qtd_tot <- db |>
@@ -395,15 +382,15 @@ server <- function(input, output, session) {
       qtd_tot <- glue::glue("{qtd_tot}")
     }
 
-    shinydashboard::infoBox(
-      title = shiny::HTML("Procedimentos realizados <br/> durante o ano:"),
+    bs4Dash::infoBox(
+      title = shiny::HTML("Procedimentos realizados durante o ano:"),
       value = qtd_tot,
       icon = shiny::icon("chart-bar"),
-      color = "yellow"
+      color = "info"
     )
   })
 
-  output$vl_tot <- shinydashboard::renderInfoBox({
+  output$vl_tot <- bs4Dash::renderInfoBox({
     periodo <- paste0("1-", 1:12, "-", input$ano)
 
     vl_tot <- db |>
@@ -437,15 +424,15 @@ server <- function(input, output, session) {
       vl_tot <- glue::glue("R$ {vl_tot}")
     }
 
-    shinydashboard::infoBox(
-      title = shiny::HTML("Valor total <br/> dos procedimentos:"),
+    bs4Dash::infoBox(
+      title = shiny::HTML("Valor total dos procedimentos:"),
       value = vl_tot,
       icon = shiny::icon("chart-bar"),
-      color = "blue"
+      color = "warning"
     )
   })
 
-  output$mean <- shinydashboard::renderInfoBox({
+  output$mean <- bs4Dash::renderInfoBox({
     periodo <- paste0("1-", 1:12, "-", input$ano)
 
     mean <- db |>
@@ -461,18 +448,37 @@ server <- function(input, output, session) {
 
     mean <- prettyNum(round(mean, 2), big.mark = "\\.", decimal.mark = ",")
 
-    shinydashboard::infoBox(
-      title = shiny::HTML("Valor médio nacional <br/> do procedimento:"),
+    bs4Dash::infoBox(
+      title = shiny::HTML("Valor médio nacional do procedimento:"),
       value = glue::glue("R$ {mean}"),
       icon = shiny::icon("chart-bar"),
-      color = "yellow"
+      color = "info"
     )
   })
 
   # bar plot --------------------------------------------------------------
 
   output$bar <- plotly::renderPlotly({
-    plot_bar <- dados_anuais() |>
+    estatistica <- as.symbol(option_estatistica())
+
+    if (option_categoria() == "Faixa etária") {
+      plot_bar <- dados_anuais() |>
+        dplyr::mutate(
+          categoria = forcats::as_factor(categoria),
+          categoria = forcats::fct_relevel(
+            categoria,
+            c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
+          )
+        )
+    } else {
+      plot_bar <- dados_anuais() |>
+        dplyr::mutate(
+          categoria = forcats::as_factor(categoria),
+          categoria := forcats::fct_reorder(categoria, {{ estatistica }})
+        )
+    }
+
+    plot_bar <- plot_bar |>
       dplyr::arrange(categoria) |>
       ggplot() +
       geom_col(
@@ -507,6 +513,7 @@ server <- function(input, output, session) {
       ))
 
     plotly::ggplotly(plot_bar)
+
   })
 
   # map plot --------------------------------------------------------------
@@ -571,11 +578,22 @@ server <- function(input, output, session) {
   # time series per region plot -------------------------------------------
 
   output$ts <- plotly::renderPlotly({
+    if (option_categoria() == "Faixa etária") {
+      plot_line <- dados_mensais() |>
+        dplyr::mutate(
+          categoria = forcats::as_factor(categoria),
+          categoria = forcats::fct_relevel(
+            categoria,
+            c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
+          )
+        )
+    } else {
+      plot_line <- dados_mensais() |>
+        dplyr::mutate(categoria = forcats::as_factor(categoria))
+    }
+
     plot_line <- dados_mensais() |>
-      dplyr::mutate(
-        mes_ano = lubridate::dmy(mes_ano),
-        categoria = forcats::as_factor(categoria)
-      ) |>
+      dplyr::mutate(mes_ano = lubridate::dmy(mes_ano)) |>
       ggplot() +
       geom_line(
         aes_string(
