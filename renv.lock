@@ -243,6 +243,24 @@
         "tidyr"
       ]
     },
+    "bs4Dash": {
+      "Package": "bs4Dash",
+      "Version": "2.0.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "79acf9184702de996bda53cef9dbf059",
+      "Requirements": [
+        "bslib",
+        "fresh",
+        "htmltools",
+        "httpuv",
+        "httr",
+        "jsonlite",
+        "lifecycle",
+        "shiny",
+        "waiter"
+      ]
+    },
     "bslib": {
       "Package": "bslib",
       "Version": "0.3.1",
@@ -427,16 +445,6 @@
         "desc",
         "remotes",
         "withr"
-      ]
-    },
-    "dashboardthemes": {
-      "Package": "dashboardthemes",
-      "Version": "1.1.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "c5121af861702a7e5fbd59acf3abb4ac",
-      "Requirements": [
-        "htmltools"
       ]
     },
     "data.table": {
@@ -746,20 +754,6 @@
         "scales",
         "tibble",
         "withr"
-      ]
-    },
-    "ggthemes": {
-      "Package": "ggthemes",
-      "Version": "4.2.4",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "617fb2c300f68e8b1ba21043fba88fd7",
-      "Requirements": [
-        "ggplot2",
-        "purrr",
-        "scales",
-        "stringr",
-        "tibble"
       ]
     },
     "gh": {
@@ -1712,42 +1706,6 @@
         "htmltools",
         "promises",
         "shiny"
-      ]
-    },
-    "shinydashboardPlus": {
-      "Package": "shinydashboardPlus",
-      "Version": "2.0.3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "5045276dcad7ad9b785d593b1a710681",
-      "Requirements": [
-        "fresh",
-        "htmltools",
-        "lifecycle",
-        "shiny",
-        "shinydashboard",
-        "waiter"
-      ]
-    },
-    "showtext": {
-      "Package": "showtext",
-      "Version": "0.9-5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "b588dee88e238bf811e27f12edee9433",
-      "Requirements": [
-        "showtextdb",
-        "sysfonts"
-      ]
-    },
-    "showtextdb": {
-      "Package": "showtextdb",
-      "Version": "3.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "c12e756cf947e58b0f2c2a520521a5a8",
-      "Requirements": [
-        "sysfonts"
       ]
     },
     "snakecase": {
