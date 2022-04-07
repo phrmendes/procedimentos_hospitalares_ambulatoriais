@@ -46,7 +46,7 @@ unpack_write_parquet <- function(url, mes_url, cols, indexes) {
     quiet = TRUE
   )
 
-  csv_file <- unzip(
+  csv_file <- zip::unzip(
     zipfile = temp,
     exdir = tempdir
   )

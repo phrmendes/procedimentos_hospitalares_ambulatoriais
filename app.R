@@ -19,7 +19,6 @@ library(rlang)
 library(shinycssloaders)
 library(sysfonts)
 library(writexl)
-library(geobr)
 
 options(scipen = 999)
 options(dplyr.summarise.inform = FALSE)
@@ -231,6 +230,14 @@ server <- function(input, output, session) {
     return(db)
   })
 
+  # gc --------------------------------------------------------------------
+
+  shiny::eventReactive(input$busca, {
+    Sys.sleep(5)
+
+    gc()
+  })
+
   # dados anuais ----------------------------------------------------------
 
   dados_anuais <- shiny::reactive({
@@ -263,8 +270,6 @@ server <- function(input, output, session) {
     dados_anuais <- dados_anuais |>
       dplyr::ungroup() |>
       dplyr::collect()
-
-    gc()
 
     return(dados_anuais)
   })
@@ -323,8 +328,6 @@ server <- function(input, output, session) {
           dplyr::summarise({{ estatistica }} := mean({{ estatistica }}))
       }
     }
-
-    gc()
 
     return(dados_mensais)
   })
@@ -685,8 +688,6 @@ server <- function(input, output, session) {
       server = TRUE
     )
   })
-
-  gc()
 }
 
 shiny::shinyApp(ui, server)
