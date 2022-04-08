@@ -233,7 +233,7 @@ server <- function(input, output, session) {
   # gc --------------------------------------------------------------------
 
   shiny::eventReactive(input$busca, {
-    Sys.sleep(5)
+    Sys.sleep(4)
 
     gc()
   })
@@ -346,8 +346,8 @@ server <- function(input, output, session) {
     bs4Dash::infoBox(
       title = shiny::HTML("Nº de procedimentos disponíveis na base:"),
       value = prettyNum(n, big.mark = "\\."),
-      icon = shiny::icon("chart-bar"),
-      color = "warning"
+      icon = shiny::icon("notes-medical", lib = "font-awesome"),
+      color = "primary"
     )
   })
 
@@ -388,8 +388,8 @@ server <- function(input, output, session) {
     bs4Dash::infoBox(
       title = shiny::HTML("Procedimentos realizados durante o ano:"),
       value = qtd_tot,
-      icon = shiny::icon("chart-bar"),
-      color = "info"
+      icon = shiny::icon("calendar", lib = "font-awesome"),
+      color = "orange"
     )
   })
 
@@ -430,8 +430,8 @@ server <- function(input, output, session) {
     bs4Dash::infoBox(
       title = shiny::HTML("Valor total dos procedimentos:"),
       value = vl_tot,
-      icon = shiny::icon("chart-bar"),
-      color = "warning"
+      icon = shiny::icon("coins", lib = "font-awesome"),
+      color = "lightblue"
     )
   })
 
@@ -454,8 +454,8 @@ server <- function(input, output, session) {
     bs4Dash::infoBox(
       title = shiny::HTML("Valor médio nacional do procedimento:"),
       value = glue::glue("R$ {mean}"),
-      icon = shiny::icon("chart-bar"),
-      color = "info"
+      icon = shiny::icon("dollar-sign", lib = "font-awesome"),
+      color = "warning"
     )
   })
 
@@ -625,11 +625,7 @@ server <- function(input, output, session) {
           hjust = 0.5
         )
       ) +
-      scale_color_manual(values = MetBrewer::met.brewer(
-        name = "Hokusai2",
-        n = 13,
-        type = "continuous"
-      )) +
+      scale_color_manual(values = tmaptools::get_brewer_pal("Paired", n = 13)) +
       ggtitle(
         stringr::str_to_upper(
           glue::glue(
