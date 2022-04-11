@@ -25,5 +25,6 @@ pacman::p_load(
   miniUI,
   parallel,
   lintr,
+  geobr,
   install = F
 )
