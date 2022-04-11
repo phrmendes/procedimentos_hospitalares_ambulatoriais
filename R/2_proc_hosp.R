@@ -38,20 +38,14 @@ pbapply::pblapply(
   function(i) {
     unpack_write_parquet(
       url = urls[[1]]$url[i],
-      mes_url = urls[[1]]$mes[i],
       cols = c(
-        "cd_procedimento",
         "id_evento_atencao_saude",
+        "ano_mes_evento",
+        "cd_procedimento",
         "uf_prestador",
-        "cd_tabela_referencia",
         "qt_item_evento_informado",
-        "vl_item_evento_informado"
-      ),
-      indexes = list(
-        "id_evento_atencao_saude",
-        "mes",
-        "cd_procedimento",
-        "uf_prestador"
+        "vl_item_evento_informado",
+        "ind_tabela_propria"
       )
     )
 
@@ -70,17 +64,11 @@ pbapply::pblapply(
   function(i) {
     unpack_write_parquet(
       url = urls[[2]]$url[i],
-      mes_url = urls[[2]]$mes[i],
       cols = c(
         "id_evento_atencao_saude",
+        "ano_mes_evento",
         "faixa_etaria",
         "sexo"
-      ),
-      indexes = list(
-        "id_evento_atencao_saude",
-        "mes",
-        "cd_procedimento",
-        "uf_prestador"
       )
     )
 
@@ -157,9 +145,9 @@ base_hosp <- purrr::map(
 base_hosp[, .(termos = unique(termo))] |>
   arrow::write_parquet(glue::glue("output/termos_hosp_{ano}.parquet"))
 
+arrow::write_parquet(base_hosp, glue::glue("output/base_hosp_{ano}.parquet"))
+
 fs::dir_ls("output/", regexp = "_[0-9]{2}.parquet$") |>
   fs::file_delete()
-
-arrow::write_parquet(base_hosp, glue::glue("output/base_hosp_{ano}.parquet"))
 
 fs::dir_delete("data/proc_hosp_db/")

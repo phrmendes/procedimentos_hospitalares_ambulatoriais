@@ -18,8 +18,7 @@ base <- function(ano, estado, mes, base, url, proc) {
         data,
         ~ tibble::tibble(
           e = mes, # criando coluna de meses em cada subtiblle
-          f = glue::glue("_{proc}_{base}.zip"),
-          mes = mes
+          f = glue::glue("_{proc}_{base}.zip")
         )
       )
     ) |>
@@ -34,8 +33,8 @@ base <- function(ano, estado, mes, base, url, proc) {
 
 # função de descompactação, leitura e escrita na database (hosp) ----------
 
-unpack_write_parquet <- function(url, mes_url, cols, indexes) {
-  temp <- tempfile()
+unpack_write_parquet <- function(url, cols) {
+  temp <- tempfile(fileext = ".zip")
 
   tempdir <- tempdir()
 
@@ -56,35 +55,29 @@ unpack_write_parquet <- function(url, mes_url, cols, indexes) {
     encoding = "UTF-8",
     select = stringr::str_to_upper(cols),
     sep = ";",
-    dec = ","
+    dec = ",",
+    blank.lines.skip = TRUE,
+    colClasses = list(double = stringr::str_to_upper(cols[1]))
   ) |>
     janitor::clean_names()
 
   x <- x[
     ,
-    collapse::na_omit(x)
+    c("ano", "mes") := data.table::tstrsplit(ano_mes_evento, "-", fixed = TRUE)
   ][
     ,
-    ":="(
-      mes = mes_url,
-      id_evento_atencao_saude = as.character(id_evento_atencao_saude))
+    !"ano_mes_evento"
+  ][
+    ,
+    id_evento_atencao_saude := as.character(id_evento_atencao_saude)
   ]
 
-  if ("cd_procedimento" %in% names(x) == TRUE) {
-    x <- collapse::funique(x, cols = c("id_evento_atencao_saude", "cd_procedimento", "mes"))
+  # |>
+  #   collapse::funique(cols = cols)
 
-    x[
-      ,
-      ":="(
-        qt_item_evento_informado = as.double(qt_item_evento_informado),
-        vl_item_evento_informado = as.double(vl_item_evento_informado)
-      )
-    ]
-  } else {
-    x <- collapse::funique(x, cols = c("id_evento_atencao_saude", "mes"))
-  }
+  if ("ind_tabela_propria" %in% names(x) == TRUE) x <- x[ind_tabela_propria != 1, !"ind_tabela_propria"]
 
-  if ("cd_tabela_referencia" %in% names(x) == TRUE) x <- x[!(cd_tabela_referencia %in% c(0, 9, 98)), !"cd_tabela_referencia"]
+  if ("cd_procedimento" %in% names(x) == TRUE) x[, cd_procedimento := as.character(as.double(cd_procedimento))]
 
   name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)") # match do nome entre a UF e o .zip no final da URL
 
@@ -99,21 +92,22 @@ unpack_write_parquet <- function(url, mes_url, cols, indexes) {
   )
 }
 
-# função para lidar com a base gigantesca de dados ambulatoriais ----------
+# função de merge mês a mês -----------------------------------------------
 
 merge_db <- function(path_1, path_2, termos) {
   db_1 <- arrow::read_parquet(path_1) |>
-    data.table::as.data.table(key = c("id_evento_atencao_saude", "mes"))
+    data.table::as.data.table(key = c("id_evento_atencao_saude", "mes", "ano"))
 
   db_2 <- arrow::read_parquet(path_2) |>
-    data.table::as.data.table(key = c("id_evento_atencao_saude", "mes"))
+    data.table::as.data.table(key = c("id_evento_atencao_saude", "mes", "ano"))
 
   termos <- termos |>
+    dplyr::mutate(cd_procedimento = as.character(as.numeric(cd_procedimento))) |>
     data.table::as.data.table(key = "cd_procedimento")
 
   db_3 <- data.table::merge.data.table(
     db_1, db_2,
-    by = c("id_evento_atencao_saude", "mes"),
+    by = c("id_evento_atencao_saude", "mes", "ano"),
     all.x = TRUE
   )
 
@@ -125,7 +119,7 @@ merge_db <- function(path_1, path_2, termos) {
     all.x = TRUE
   )
 
-  db_3 <- db_3[!is.na(termo)]
+  # db_3 <- db_3[!is.na(termo)]
 
   name <- stringr::str_extract(
     path_1,
@@ -159,16 +153,6 @@ bind <- function(a, b, c, d) {
     dplyr::bind_rows()
 
   return(x)
-}
-
-# função que lê todos os .csv de uma pasta --------------------------------
-
-load_data <- function(x) {
-  fs::dir_ls(x, regexp = "*.csv") |>
-    purrr::map(
-      readr::read_delim,
-      delim = ";"
-    )
 }
 
 # operador "not_in" -------------------------------------------------------

@@ -11,9 +11,15 @@ source("R/0_functions.R")
 
 # carregando tabelas em uma lista
 
-tabelas <- load_data("data/") |>
+tabelas <- fs::dir_ls("data/", regexp = "*.csv") |>
   purrr::map(
-    janitor::clean_names
+    ~ vroom::vroom(.x, show_col_types = FALSE, progress = FALSE) |>
+      janitor::clean_names() |>
+      dplyr::mutate(
+        codigo_do_termo = as.numeric(codigo_do_termo),
+        termo = stringr::str_to_upper(termo)
+      ) |>
+      dplyr::select(codigo_do_termo, termo)
   )
 
 # renomeando elementos da lista
@@ -33,9 +39,8 @@ tabelas <- bind(
   tabelas$tabela_63
 ) |>
   dplyr::rename(cd_procedimento = codigo_do_termo) |>
-  dplyr::mutate(cd_procedimento = as.character(as.integer(cd_procedimento))) |>
-  dplyr::distinct(cd_procedimento, .keep_all = T) |>
-  dplyr::mutate(termo = stringr::str_to_upper(termo))
+  dplyr::mutate(cd_procedimento = as.character(cd_procedimento)) |>
+  dplyr::distinct()
 
 # criando base de tabelas
 
@@ -43,10 +48,3 @@ arrow::write_parquet(
   x = tabelas,
   sink = "data/tabelas_tuss.parquet"
 )
-
-# deletando arquivos importados
-
-fs::dir_ls("data/", regexp = "tabela_.") |>
-  purrr::walk(
-    fs::file_delete
-  )
