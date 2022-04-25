@@ -11,6 +11,8 @@ future::plan("multisession")
 
 ano <- 2020
 
+months <- c(paste0("0", 1:9), 10:12)
+
 # definindo termos da buscas no dados abertos -----------------------------
 
 estados <- readr::read_csv("data/aux_files/estados.csv") |> purrr::flatten_chr()
@@ -22,9 +24,9 @@ urls <- purrr::map(
   ~ base(
     ano = ano,
     estado = estados,
-    mes = c(paste0("0", 1:9), 10:12),
+    mes = meses,
     base = .x,
-    url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
+    url_base = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
     proc = "HOSP"
   )
 )
@@ -34,10 +36,10 @@ urls <- purrr::map(
 fs::dir_create("data/parquet/")
 
 pbapply::pblapply(
-  seq_len(nrow(urls[[1]])),
+  urls[[1]],
   function(i) {
     unpack_write_parquet(
-      url = urls[[1]]$url[i],
+      url = i,
       cols = c(
         "id_evento_atencao_saude",
         "ano_mes_evento",
@@ -54,16 +56,13 @@ pbapply::pblapply(
     return("x")
   },
   cl = parallel::detectCores()
-) |>
-  purrr::flatten_chr() |>
-  length() %>% # referencia o objeto vindo no pipe
-  paste0(., " importados.")
+)
 
 pbapply::pblapply(
-  seq_len(nrow(urls[[2]])),
+  urls[[2]],
   function(i) {
     unpack_write_parquet(
-      url = urls[[2]]$url[i],
+      url = i,
       cols = c(
         "id_evento_atencao_saude",
         "ano_mes_evento",
@@ -74,23 +73,20 @@ pbapply::pblapply(
 
     gc()
 
-    return("x")
+    return("Importado.")
   },
   cl = parallel::detectCores()
-) |>
-  purrr::flatten_chr() |>
-  length() %>% # referencia o objeto vindo no pipe
-  paste0(., " importados.")
+)
 
 # merge entre bases DET e CONS --------------------------------------------
 
 fs::dir_create("data/proc_hosp_db/")
 
-det_db <- paste0(fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet"))
+det_db <- fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet")
 
-cons_db <- paste0(fs::dir_ls(path = "data/parquet/", regexp = "*CONS.parquet"))
+cons_db <- fs::dir_ls(path = "data/parquet/", regexp = "*CONS.parquet")
 
-tuss <- arrow::read_parquet("data/tabelas_tuss.parquet") # dicionário de termos
+tuss <- arrow::read_parquet("data/tabelas_tuss.parquet")
 
 pbapply::pblapply(
   seq_len(length(det_db)),
@@ -120,7 +116,7 @@ parametros <- list(
 
 estatisticas <- list(
   cols = c("uf_prestador", "faixa_etaria", "sexo"),
-  names = paste0("base_hosp_", c("uf", "idade", "sexo"), "_", ano),
+  names = glue::glue("base_hosp_{c('uf', 'idade', 'sexo')}_{ano}"),
   types = c("uf", "faixa etária", "sexo")
 )
 
@@ -131,7 +127,8 @@ purrr::walk(
     complete_vars = parametros[[.x]],
     export_name = estatisticas$names[.x],
     type = estatisticas$types[.x],
-    db_name = "proc_hosp_db"
+    db_name = "proc_hosp_db",
+    months = meses
   )
 )
 
