@@ -4,20 +4,20 @@
 
 # função para seleção de bases por ano, estado, mês e período -------------
 
-base <- function(ano, estado, mes, base, url, proc) {
-  x <- tibble::tibble(
-    a = glue::glue("{url}{ano}/"),
+base <- function(ano, estado, mes, base, url_base, proc) {
+  urls <- tibble::tibble(
+    a = glue::glue("{url_base}{ano}/"),
     b = estado,
     c = glue::glue("_{ano}"),
-  ) |> # criando tibble base para operação
+  ) |>
     dplyr::group_by(a, b, c) |>
-    tidyr::nest() |> # criando subtibbles para cada região
+    tidyr::nest() |>
     dplyr::mutate(
-      d = glue::glue("/{b}"), # adicionando coluna auxiliar para união de url
+      d = glue::glue("/{b}"),
       data = purrr::map(
         data,
         ~ tibble::tibble(
-          e = mes, # criando coluna de meses em cada subtiblle
+          e = mes,
           f = glue::glue("_{proc}_{base}.zip")
         )
       )
@@ -26,17 +26,16 @@ base <- function(ano, estado, mes, base, url, proc) {
     tidyr::unite("url",
       c(a, b, d, c, e, f),
       sep = ""
-    )
+    ) |>
+    purrr::flatten_chr()
 
-  return(x)
+  return(urls)
 }
 
 # função de descompactação, leitura e escrita na database (hosp) ----------
 
 unpack_write_parquet <- function(url, cols) {
   temp <- tempfile(fileext = ".zip")
-
-  tempdir <- tempdir()
 
   download.file(
     url = url,
@@ -45,21 +44,22 @@ unpack_write_parquet <- function(url, cols) {
     quiet = TRUE
   )
 
-  csv_file <- zip::unzip(
-    zipfile = temp,
-    exdir = tempdir
-  )
-
-  x <- data.table::fread(
-    input = csv_file,
-    encoding = "UTF-8",
-    select = stringr::str_to_upper(cols),
-    sep = ";",
-    dec = ",",
-    blank.lines.skip = TRUE,
-    colClasses = list(double = stringr::str_to_upper(cols[1]))
+  x <- vroom::vroom(
+    file = temp,
+    delim = ";",
+    locale = locale(
+      grouping_mark = ".",
+      decimal_mark = ",",
+      encoding = "UTF-8"
+    ),
+    col_select = stringr::str_to_upper(cols),
+    skip_empty_rows = TRUE,
+    progress = FALSE,
+    show_col_types = FALSE
   ) |>
-    janitor::clean_names()
+    janitor::clean_names() |>
+    collapse::funique(cols = cols) |>
+    data.table::as.data.table()
 
   x <- x[
     ,
@@ -72,24 +72,18 @@ unpack_write_parquet <- function(url, cols) {
     id_evento_atencao_saude := as.character(id_evento_atencao_saude)
   ]
 
-  # |>
-  #   collapse::funique(cols = cols)
-
   if ("ind_tabela_propria" %in% names(x) == TRUE) x <- x[ind_tabela_propria != 1, !"ind_tabela_propria"]
 
   if ("cd_procedimento" %in% names(x) == TRUE) x[, cd_procedimento := as.character(as.double(cd_procedimento))]
 
-  name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)") # match do nome entre a UF e o .zip no final da URL
+  name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)")
 
   arrow::write_parquet(
     x = x,
     sink = glue::glue("data/parquet/{name}.parquet")
   )
 
-  purrr::walk(
-    list(temp, csv_file),
-    ~ fs::file_delete(glue::glue("{.x}"))
-  )
+  fs::file_delete(glue::glue("{temp}"))
 }
 
 # função de merge mês a mês -----------------------------------------------
@@ -106,7 +100,8 @@ merge_db <- function(path_1, path_2, termos) {
     data.table::as.data.table(key = "cd_procedimento")
 
   db_3 <- data.table::merge.data.table(
-    db_1, db_2,
+    x = db_1,
+    y = db_2,
     by = c("id_evento_atencao_saude", "mes", "ano"),
     all.x = TRUE
   )
@@ -114,12 +109,13 @@ merge_db <- function(path_1, path_2, termos) {
   data.table::setkey(db_3, "cd_procedimento")
 
   db_3 <- data.table::merge.data.table(
-    db_3, termos,
+    x = db_3,
+    y = termos,
     by = "cd_procedimento",
     all.x = TRUE
   )
 
-  # db_3 <- db_3[!is.na(termo)]
+  db_3 <- db_3[!is.na(termo)]
 
   name <- stringr::str_extract(
     path_1,
@@ -144,7 +140,7 @@ merge_db <- function(path_1, path_2, termos) {
 # função que cria dummies que indicam as tabelas base ---------------------
 
 bind <- function(a, b, c, d) {
-  x <- list(
+  df <- list(
     a = a |> dplyr::mutate(tabela = "19"),
     b = b |> dplyr::mutate(tabela = "20"),
     c = c |> dplyr::mutate(tabela = "22"),
@@ -152,7 +148,7 @@ bind <- function(a, b, c, d) {
   ) |>
     dplyr::bind_rows()
 
-  return(x)
+  return(df)
 }
 
 # operador "not_in" -------------------------------------------------------
@@ -161,15 +157,13 @@ bind <- function(a, b, c, d) {
 
 # função de tratamento da database do shinyapp ----------------------------
 
-export_parquet <- function(x, complete_vars, db_name, export_name, type) {
+export_parquet <- function(x, complete_vars, db_name, export_name, type, months) {
   df <- arrow::open_dataset(glue::glue("data/{db_name}"))
 
   group_by_var <- as.symbol(x)
 
-  mes <- c(paste0("0", 1:9), 10:12)
-
   pbapply::pblapply(
-    mes,
+    months,
     function(i) {
       y <- df |>
         dplyr::select(-tabela) |>

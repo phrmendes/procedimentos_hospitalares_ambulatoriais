@@ -9,6 +9,8 @@ source("R/0_functions.R")
 
 ano <- 2018
 
+meses <- c(paste0("0", 1:9), 10:12)
+
 # definindo termos da buscas no dados abertos -----------------------------
 
 estados <- readr::read_csv("data/aux_files/estados.csv") |> purrr::flatten_chr()
@@ -20,9 +22,9 @@ urls <- purrr::map(
   ~ base(
     ano = ano,
     estado = estados,
-    mes = c(paste0("0", 1:9), 10:12),
+    mes = meses,
     base = .x,
-    url = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/",
+    url_base = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/",
     proc = "AMB"
   )
 )
@@ -32,24 +34,18 @@ urls <- purrr::map(
 fs::dir_create("data/parquet/")
 
 pbapply::pblapply(
-  seq_len(nrow(urls[[1]])),
+  urls[[1]],
   function(i) {
     unpack_write_parquet(
-      url = urls[[1]]$url[i],
-      mes_url = urls[[1]]$mes[i],
+      url = i,
       cols = c(
-        "cd_procedimento",
         "id_evento_atencao_saude",
+        "ano_mes_evento",
+        "cd_procedimento",
         "uf_prestador",
-        "cd_tabela_referencia",
         "qt_item_evento_informado",
-        "vl_item_evento_informado"
-      ),
-      indexes = list(
-        "id_evento_atencao_saude",
-        "mes",
-        "cd_procedimento",
-        "uf_prestador"
+        "vl_item_evento_informado",
+        "ind_tabela_propria"
       )
     )
 
@@ -57,49 +53,37 @@ pbapply::pblapply(
 
     return("x")
   }
-) |>
-  purrr::flatten_chr() |>
-  length() %>% # referencia o objeto vindo no pipe
-  paste0(., " importados.")
+)
 
 pbapply::pblapply(
-  seq_len(nrow(urls[[2]])),
+  urls[[2]],
   function(i) {
     unpack_write_parquet(
-      url = urls[[2]]$url[i],
-      mes_url = urls[[2]]$mes[i],
+      url = i,
       cols = c(
         "id_evento_atencao_saude",
+        "ano_mes_evento",
         "faixa_etaria",
         "sexo"
-      ),
-      indexes = list(
-        "id_evento_atencao_saude",
-        "mes",
-        "cd_procedimento",
-        "uf_prestador"
       )
     )
 
     gc()
 
-    return("x")
+    return("Importado.")
   }
-) |>
-  purrr::flatten_chr() |>
-  length() %>% # referencia o objeto vindo no pipe
-  paste0(., " importados.")
+)
 
 # merge entre bases DET e CONS --------------------------------------------
 
 fs::dir_create("data/proc_amb_db/")
 
-det_db <- paste0(fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet"))
+det_db <- fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet")
 
-cons_db <- paste0(fs::dir_ls(path = "data/parquet/", regexp = "*CONS.parquet"))
+cons_db <- fs::dir_ls(path = "data/parquet/", regexp = "*CONS.parquet")
 
 tuss <- arrow::read_parquet("data/tabelas_tuss.parquet") |>
-  data.table::as.data.table() # dicionário de termos
+  data.table::as.data.table()
 
 pbapply::pblapply(
   seq_len(length(det_db)),
@@ -128,7 +112,7 @@ parametros <- list(
 
 estatisticas <- list(
   cols = c("uf_prestador", "faixa_etaria", "sexo"),
-  names = paste0("base_amb_", c("uf", "idade", "sexo"), "_", ano),
+  names = glue::glue("base_amb_{c('uf', 'idade', 'sexo')}_{ano}"),
   types = c("uf", "faixa etária", "sexo")
 )
 
@@ -139,7 +123,8 @@ purrr::walk(
     complete_vars = parametros[[.x]],
     export_name = estatisticas$names[.x],
     type = estatisticas$types[.x],
-    db_name = "proc_amb_db"
+    db_name = "proc_amb_db",
+    months = meses
   )
 )
 

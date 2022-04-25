@@ -36,6 +36,8 @@ vars_shiny <- list(
   estatistica = c("Quantidade total", "Valor total", "Valor médio")
 )
 
+# adicionar tabela com os 10 procedimentos mais realizados no ano
+
 # header ------------------------------------------------------------------
 
 header <- bs4Dash::dashboardHeader(
