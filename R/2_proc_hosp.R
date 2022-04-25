@@ -24,7 +24,7 @@ urls <- purrr::map(
   ~ base(
     ano = ano,
     estado = estados,
-    mes = meses,
+    mes = months,
     base = .x,
     url_base = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
     proc = "HOSP"
@@ -44,6 +44,7 @@ pbapply::pblapply(
         "id_evento_atencao_saude",
         "ano_mes_evento",
         "cd_procedimento",
+        "cd_tabela_referencia",
         "uf_prestador",
         "qt_item_evento_informado",
         "vl_item_evento_informado",
@@ -53,7 +54,7 @@ pbapply::pblapply(
 
     gc()
 
-    return("x")
+    return("Importado.")
   },
   cl = parallel::detectCores()
 )
@@ -65,7 +66,6 @@ pbapply::pblapply(
       url = i,
       cols = c(
         "id_evento_atencao_saude",
-        "ano_mes_evento",
         "faixa_etaria",
         "sexo"
       )
@@ -128,7 +128,7 @@ purrr::walk(
     export_name = estatisticas$names[.x],
     type = estatisticas$types[.x],
     db_name = "proc_hosp_db",
-    months = meses
+    months = months
   )
 )
 

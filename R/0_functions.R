@@ -44,7 +44,7 @@ unpack_write_parquet <- function(url, cols) {
     quiet = TRUE
   )
 
-  x <- vroom::vroom(
+  df <- vroom::vroom(
     file = temp,
     delim = ";",
     locale = locale(
@@ -58,28 +58,22 @@ unpack_write_parquet <- function(url, cols) {
     show_col_types = FALSE
   ) |>
     janitor::clean_names() |>
-    collapse::funique(cols = cols) |>
     data.table::as.data.table()
 
-  x <- x[
-    ,
-    c("ano", "mes") := data.table::tstrsplit(ano_mes_evento, "-", fixed = TRUE)
-  ][
-    ,
-    !"ano_mes_evento"
-  ][
-    ,
-    id_evento_atencao_saude := as.character(id_evento_atencao_saude)
-  ]
+  df[, id_evento_atencao_saude := as.character(id_evento_atencao_saude)]
 
-  if ("ind_tabela_propria" %in% names(x) == TRUE) x <- x[ind_tabela_propria != 1, !"ind_tabela_propria"]
+  if ("cd_procedimento" %in% names(df) == TRUE) df[, cd_procedimento := as.character(as.numeric(cd_procedimento))]
 
-  if ("cd_procedimento" %in% names(x) == TRUE) x[, cd_procedimento := as.character(as.double(cd_procedimento))]
+  if ("ind_tabela_propria" %in% names(df) == TRUE) df <- df[ind_tabela_propria != 1, !"ind_tabela_propria"]
+
+  if ("cd_tabela_referencia" %in% names(df) == TRUE) df <- df[cd_tabela_referencia %not_in% c("98", "90"), !"cd_tabela_referencia"]
+
+  if ("ano_mes_evento" %in% names(df) == TRUE) df <- df[, c("ano", "mes") := data.table::tstrsplit(ano_mes_evento, "-", fixed = TRUE)][, !"ano_mes_evento"]
 
   name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)")
 
   arrow::write_parquet(
-    x = x,
+    x = df,
     sink = glue::glue("data/parquet/{name}.parquet")
   )
 
@@ -90,10 +84,10 @@ unpack_write_parquet <- function(url, cols) {
 
 merge_db <- function(path_1, path_2, termos) {
   db_1 <- arrow::read_parquet(path_1) |>
-    data.table::as.data.table(key = c("id_evento_atencao_saude", "mes", "ano"))
+    data.table::as.data.table(key = "id_evento_atencao_saude")
 
   db_2 <- arrow::read_parquet(path_2) |>
-    data.table::as.data.table(key = c("id_evento_atencao_saude", "mes", "ano"))
+    data.table::as.data.table(key = "id_evento_atencao_saude")
 
   termos <- termos |>
     dplyr::mutate(cd_procedimento = as.character(as.numeric(cd_procedimento))) |>
@@ -102,7 +96,7 @@ merge_db <- function(path_1, path_2, termos) {
   db_3 <- data.table::merge.data.table(
     x = db_1,
     y = db_2,
-    by = c("id_evento_atencao_saude", "mes", "ano"),
+    by = "id_evento_atencao_saude",
     all.x = TRUE
   )
 
@@ -115,7 +109,7 @@ merge_db <- function(path_1, path_2, termos) {
     all.x = TRUE
   )
 
-  db_3 <- db_3[!is.na(termo)]
+  db_3 <- db_3[!is.na(termo)] |> collapse::funique(cols = names(db_3))
 
   name <- stringr::str_extract(
     path_1,
