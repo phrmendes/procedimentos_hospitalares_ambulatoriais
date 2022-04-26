@@ -89,9 +89,7 @@ merge_db <- function(path_1, path_2, termos) {
   db_2 <- arrow::read_parquet(path_2) |>
     data.table::as.data.table(key = "id_evento_atencao_saude")
 
-  termos <- termos |>
-    dplyr::mutate(cd_procedimento = as.character(as.numeric(cd_procedimento))) |>
-    data.table::as.data.table(key = "cd_procedimento")
+  termos <- data.table::as.data.table(termos, key = "cd_procedimento")
 
   db_3 <- data.table::merge.data.table(
     x = db_1,
@@ -108,8 +106,6 @@ merge_db <- function(path_1, path_2, termos) {
     by = "cd_procedimento",
     all.x = TRUE
   )
-
-  db_3 <- db_3[!is.na(termo)] |> collapse::funique(cols = names(db_3))
 
   name <- stringr::str_extract(
     path_1,
@@ -160,7 +156,6 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
     months,
     function(i) {
       y <- df |>
-        dplyr::select(-tabela) |>
         dplyr::filter(mes == i) |>
         dplyr::group_by(cd_procedimento, termo, {{ group_by_var }}) |>
         dplyr::summarise(
@@ -251,7 +246,9 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
         new = "categoria"
       )
 
-      arrow::write_parquet(z, glue::glue("output/{export_name}_{i}.parquet"))
+      fs::dir_create("output/export")
+
+      arrow::write_parquet(z, glue::glue("output/export/{export_name}_{i}.parquet"))
     }
   )
 

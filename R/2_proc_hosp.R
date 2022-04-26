@@ -139,7 +139,7 @@ base_hosp <- purrr::map(
 ) |>
   data.table::rbindlist()
 
-base_hosp[, .(termos = unique(termo))] |>
+base_hosp[, .(termos = collapse::funique(termo))] |>
   arrow::write_parquet(glue::glue("output/termos_hosp_{ano}.parquet"))
 
 arrow::write_parquet(base_hosp, glue::glue("output/base_hosp_{ano}.parquet"))
