@@ -4,8 +4,6 @@
 
 if (!require("pacman")) install.packages("pacman")
 
-if (!require("devtools")) install.packages("devtools")
-
 # install.packages("arrow", repos = "https://packagemanager.rstudio.com/all/__linux__/focal/latest")
 
 pacman::p_load_gh("ipeaGIT/geobr/r-package", install = FALSE)
