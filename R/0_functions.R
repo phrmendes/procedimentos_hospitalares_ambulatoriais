@@ -62,13 +62,24 @@ unpack_write_parquet <- function(url, cols) {
 
   df[, id_evento_atencao_saude := as.character(id_evento_atencao_saude)]
 
-  if ("cd_procedimento" %in% names(df) == TRUE) df[, cd_procedimento := as.character(as.numeric(cd_procedimento))]
+  if (stringr::str_detect(url, "DET")) {
+    df[
+      (ind_tabela_propria == 1 | cd_tabela_referencia %in% c("98", "90")),
+      cd_procedimento := 0
+    ][
+      ,
+      cd_procedimento := data.table::fifelse(
+        cd_procedimento == "0",
+        "sem_info",
+        as.character(as.numeric(cd_procedimento))
+      )
+    ][
+      ,
+      c("ano", "mes") := data.table::tstrsplit(ano_mes_evento, "-", fixed = TRUE)
+    ]
 
-  if ("ind_tabela_propria" %in% names(df) == TRUE) df <- df[ind_tabela_propria != 1, !"ind_tabela_propria"]
-
-  if ("cd_tabela_referencia" %in% names(df) == TRUE) df <- df[cd_tabela_referencia %not_in% c("98", "90"), !"cd_tabela_referencia"]
-
-  if ("ano_mes_evento" %in% names(df) == TRUE) df <- df[, c("ano", "mes") := data.table::tstrsplit(ano_mes_evento, "-", fixed = TRUE)][, !"ano_mes_evento"]
+    df <- df[, !c("ind_tabela_propria", "cd_tabela_referencia", "ano_mes_evento")]
+  }
 
   name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)")
 
@@ -152,7 +163,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
 
   group_by_var <- as.symbol(x)
 
-  pbapply::pblapply(
+  n_proc_nulo <- pbapply::pblapply(
     months,
     function(i) {
       y <- df |>
@@ -163,7 +174,8 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
           tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
         ) |>
         dplyr::ungroup() |>
-        dplyr::mutate(mean_vl = tot_vl / tot_qt)
+        dplyr::mutate(mean_vl = tot_vl / tot_qt) |>
+        dplyr::compute()
 
       proc_nulo <- y |>
         dplyr::group_by(cd_procedimento) |>
@@ -249,8 +261,16 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
       fs::dir_create("output/export")
 
       arrow::write_parquet(z, glue::glue("output/export/{export_name}_{i}.parquet"))
+
+      n_proc_nulo <- proc_nulo |>
+        dplyr::tally() |>
+        dplyr::collect()
+
+      return(n_proc_nulo)
     }
   )
+
+  return(n_proc_nulo)
 
   gc()
 }
