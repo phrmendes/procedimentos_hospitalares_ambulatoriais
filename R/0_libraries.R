@@ -6,9 +6,9 @@ if (!require("pacman")) install.packages("pacman")
 
 if (!require("devtools")) install.packages("devtools")
 
-# devtools::install_github("ipeaGIT/geobr", subdir = "r-package")
-
 # install.packages("arrow", repos = "https://packagemanager.rstudio.com/all/__linux__/focal/latest")
+
+pacman::p_load_gh("ipeaGIT/geobr/r-package", install = FALSE)
 
 pacman::p_load(
   data.table,
@@ -28,6 +28,5 @@ pacman::p_load(
   miniUI,
   parallel,
   lintr,
-  geobr,
   install = FALSE
 )
