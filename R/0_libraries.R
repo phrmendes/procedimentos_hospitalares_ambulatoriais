@@ -28,5 +28,4 @@ pacman::p_load(
   install = FALSE
 )
 
-pacman::p_load_gh("ipeaGIT/geobr/r-package", install = FALSE)
-
+pacman::p_load_gh("ipeaGIT/geobr/r-package", install = TRUE)
