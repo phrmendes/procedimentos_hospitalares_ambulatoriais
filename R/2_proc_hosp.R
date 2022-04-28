@@ -120,7 +120,7 @@ estatisticas <- list(
   types = c("uf", "faixa etária", "sexo")
 )
 
-purrr::walk(
+purrr::map(
   1:3,
   ~ export_parquet(
     x = estatisticas$cols[.x],
