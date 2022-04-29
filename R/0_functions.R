@@ -68,7 +68,7 @@ unpack_write_parquet <- function(url, cols) {
       cd_procedimento := 0
     ][
       ,
-      c("ano", "mes") := data.table::tstrsplit(ano_mes_evento, "-", fixed = TRUE)
+      c("ano", "mes") := data.table::tstrsplit(get(cols[2]), "-", fixed = TRUE)
     ][
       ,
       cd_procedimento := data.table::fifelse(
@@ -78,7 +78,7 @@ unpack_write_parquet <- function(url, cols) {
       )
     ]
 
-    df <- df[, !c("ind_tabela_propria", "cd_tabela_referencia", "ano_mes_evento")]
+    data.table::set(df, , c("ind_tabela_propria", "cd_tabela_referencia", cols[2]), NULL)
   }
 
   name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)")

@@ -31,14 +31,12 @@ urls_base <- c(
 # função de download ------------------------------------------------------
 
 for (j in c("hosp", "amb")) {
-  cat(glue::glue("\n============ {stringr::str_to_upper(j)} ============\n"))
-
   purrr::walk(
     ano,
     function(ano) {
       # definindo termos da buscas no dados abertos -----------------------
 
-      cat(glue::glue("\n========== ANO: {ano} ==========\n"))
+      cat(glue::glue("\n======= BASE: {stringr::str_to_upper(j)}, ANO: {ano} =======\n"))
 
       urls <- purrr::map(
         bases,

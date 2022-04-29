@@ -2,9 +2,15 @@
 # --- BIBLIOTECAS --- #
 # ------------------- #
 
-if (!require("pacman")) install.packages("pacman")
+if (!require("pacman")) {
+  install.packages("pacman")
+  require("pacman")
+}
 
-# install.packages("arrow", repos = "https://packagemanager.rstudio.com/all/__linux__/focal/latest")
+if (!require("arrow")) {
+  install.packages("arrow", repos = "https://packagemanager.rstudio.com/all/__linux__/focal/latest")
+  require("arrow")
+}
 
 pacman::p_load(
   data.table,
@@ -20,7 +26,6 @@ pacman::p_load(
   janitor,
   styler,
   fs,
-  arrow,
   memoise,
   miniUI,
   parallel,
@@ -28,4 +33,7 @@ pacman::p_load(
   install = FALSE
 )
 
-pacman::p_load_gh("ipeaGIT/geobr/r-package", install = FALSE)
+if (!require("geobr")) {
+  pacman::p_load_gh("ipeaGIT/geobr/r-package", install = TRUE)
+  require("geobr")
+}
