@@ -68,14 +68,14 @@ unpack_write_parquet <- function(url, cols) {
       cd_procedimento := 0
     ][
       ,
+      c("ano", "mes") := data.table::tstrsplit(ano_mes_evento, "-", fixed = TRUE)
+    ][
+      ,
       cd_procedimento := data.table::fifelse(
         cd_procedimento == "0",
         "sem_info",
         as.character(as.numeric(cd_procedimento))
       )
-    ][
-      ,
-      c("ano", "mes") := data.table::tstrsplit(ano_mes_evento, "-", fixed = TRUE)
     ]
 
     df <- df[, !c("ind_tabela_propria", "cd_tabela_referencia", "ano_mes_evento")]
@@ -118,6 +118,15 @@ merge_db <- function(path_1, path_2, termos) {
     all.x = TRUE
   )
 
+  db_3[
+    ,
+    termo := data.table::fifelse(
+      cd_procedimento == "sem_info",
+      "sem_info",
+      termo
+    )
+  ]
+
   name <- stringr::str_extract(
     path_1,
     "(?<=/parquet/)(.*)(?=\\_DET.parquet$)"
@@ -159,16 +168,16 @@ bind <- function(a, b, c, d) {
 # função de tratamento da database do shinyapp ----------------------------
 
 export_parquet <- function(x, complete_vars, db_name, export_name, type, months) {
-  df <- arrow::open_dataset(glue::glue("data/{db_name}"))
+  db <- arrow::open_dataset(glue::glue("data/{db_name}"))
 
   group_by_var <- as.symbol(x)
 
-  n_proc_nulo <- pbapply::pblapply(
+  pbapply::pblapply(
     months,
     function(i) {
-      y <- df |>
+      df <- db |>
         dplyr::filter(mes == i) |>
-        dplyr::group_by(cd_procedimento, termo, {{ group_by_var }}) |>
+        dplyr::group_by(cd_procedimento, termo, ano, mes, {{ group_by_var }}) |>
         dplyr::summarise(
           tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
           tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
@@ -177,32 +186,35 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
         dplyr::mutate(mean_vl = tot_vl / tot_qt) |>
         dplyr::compute()
 
-      proc_nulo <- y |>
+      proc_n_nulos <- df |>
         dplyr::group_by(cd_procedimento) |>
         dplyr::summarise(
-          tot_qt = sum(tot_qt),
-          tot_vl = sum(tot_vl),
-          mean_vl = sum(mean_vl)
+          tot_qt = sum(tot_qt, na.rm = TRUE),
+          tot_vl = sum(tot_vl, na.rm = TRUE),
+          mean_vl = sum(mean_vl, na.rm = TRUE)
         ) |>
         dplyr::filter(tot_qt != 0 & tot_vl != 0 & mean_vl != 0) |>
         dplyr::select(cd_procedimento)
 
-      z <- y |>
-        dplyr::semi_join(proc_nulo, by = "cd_procedimento") |>
+      df <- df |>
+        dplyr::semi_join(proc_n_nulos, by = "cd_procedimento") |>
         dplyr::collect() |>
         data.table::as.data.table()
 
       if (x == "uf_prestador") {
-        z <- z[
+        df <- df[
           ,
           .SD[
             .(uf_prestador = complete_vars),
             on = x
           ],
-          by = .(cd_procedimento, termo) # completando UF's faltantes
+          by = .(cd_procedimento, termo, ano, mes) # completando UF's faltantes
+        ][
+          ,
+          tipo := x
         ]
       } else if (x == "faixa_etaria") {
-        z <- z[
+        df <- df[
           ,
           faixa_etaria := tidyfast::dt_case_when(
             faixa_etaria == "<1" ~ "< 1",
@@ -215,10 +227,13 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
             .(faixa_etaria = complete_vars),
             on = x
           ],
-          by = .(cd_procedimento, termo) # completando faixas etárias faltantes
+          by = .(cd_procedimento, termo, ano, mes) # completando faixas etárias faltantes
+        ][
+          ,
+          tipo := x
         ]
       } else {
-        z <- z[
+        df <- df[
           ,
           sexo := tidyfast::dt_case_when(
             sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
@@ -230,47 +245,33 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
             .(sexo = complete_vars),
             on = x
           ],
-          by = .(cd_procedimento, termo) # completando sexos faltantes
+          by = .(cd_procedimento, termo, ano, mes) # completando sexos faltantes
+        ][
+          ,
+          tipo := x
         ]
       }
 
-      z <- z[
+      df <- df[
         ,
         furrr::future_map(
           .SD,
           collapse::replace_NA,
           value = 0
         )
-      ][
-        termo != "0"
-      ][
-        ,
-        ":="(
-          mes = as.integer(i),
-          ano = as.integer(stringr::str_extract(export_name, "[0-9]{4}$")),
-          tipo = type
-        )
       ]
 
       data.table::setnames(
-        z,
+        df,
         old = paste0(x),
         new = "categoria"
       )
 
       fs::dir_create("output/export")
 
-      arrow::write_parquet(z, glue::glue("output/export/{export_name}_{i}.parquet"))
-
-      n_proc_nulo <- proc_nulo |>
-        dplyr::tally() |>
-        dplyr::collect()
-
-      return(n_proc_nulo)
+      arrow::write_parquet(df, glue::glue("output/export/{export_name}_{i}.parquet"))
     }
   )
-
-  return(n_proc_nulo)
 
   gc()
 }
