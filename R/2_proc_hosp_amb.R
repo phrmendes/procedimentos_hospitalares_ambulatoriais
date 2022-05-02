@@ -132,8 +132,6 @@ for (j in c("hosp", "amb")) {
           )
 
           gc()
-
-          return("Importado.")
         },
         cl = parallel::detectCores()
       )
