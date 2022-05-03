@@ -54,7 +54,7 @@ for (j in c("hosp", "amb")) {
 
       fs::dir_create("data/parquet/")
 
-      cat("===== DOWNLOAD ====\n")
+      cat("\n===== DOWNLOAD ====\n")
 
       if (j == "hosp") {
         cols_det <- c(
@@ -112,7 +112,7 @@ for (j in c("hosp", "amb")) {
 
       # merge entre bases DET e CONS --------------------------------------
 
-      cat("===== MERGE ====\n")
+      cat("\n===== MERGE ====\n")
 
       fs::dir_create(glue::glue("data/proc_{j}_db/"))
 
@@ -146,7 +146,7 @@ for (j in c("hosp", "amb")) {
 
       # tratando database -------------------------------------------------
 
-      cat("===== EXPORT ====\n")
+      cat("\n===== EXPORT ====\n")
 
       estatisticas <- list(
         cols = c("uf_prestador", "faixa_etaria", "sexo"),
