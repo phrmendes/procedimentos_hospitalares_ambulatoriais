@@ -54,12 +54,6 @@ termos_db[
   ano :=  paste0("1-1-", ano)
 ]
 
-termos_db <- arrow::open_dataset("output/db_termos_shiny/") |>
-  dplyr::collect()
-
-db <- arrow::open_dataset("output/db_shiny/") |>
-  dplyr::collect()
-
 arrow::write_dataset(
   db,
   "output/db_shiny",
