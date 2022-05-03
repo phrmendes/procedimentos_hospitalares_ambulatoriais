@@ -35,7 +35,10 @@ base <- function(ano, estado, mes, base, url_base, proc) {
 # função de descompactação, leitura e escrita na database (hosp) ----------
 
 unpack_write_parquet <- function(url, cols) {
-  temp <- tempfile(fileext = ".zip")
+
+  tempdir <- fs::dir_create(glue::glue("{tempdir()}/downloads"))
+
+  temp <- tempfile(fileext = ".zip", tmpdir = tempdir)
 
   download.file(
     url = url,
@@ -44,8 +47,17 @@ unpack_write_parquet <- function(url, cols) {
     quiet = TRUE
   )
 
+  zip::unzip(
+    zipfile = temp,
+    exdir = tempdir
+  )
+
+  fs::file_delete(temp)
+
+  name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)")
+
   df <- vroom::vroom(
-    file = temp,
+    file = glue::glue("{tempdir}/{name}.csv"),
     delim = ";",
     locale = locale(
       grouping_mark = ".",
@@ -81,14 +93,12 @@ unpack_write_parquet <- function(url, cols) {
     data.table::set(df, , c("ind_tabela_propria", "cd_tabela_referencia", cols[2]), NULL)
   }
 
-  name <- stringr::str_extract(url, "(?<=/[A-Z]{2}/)(.*)(?=\\.zip$)")
-
   arrow::write_parquet(
     x = df,
     sink = glue::glue("data/parquet/{name}.parquet")
   )
 
-  fs::file_delete(glue::glue("{temp}"))
+  fs::file_delete(glue::glue("{tempdir}/{name}.csv"))
 }
 
 # função de merge mês a mês -----------------------------------------------

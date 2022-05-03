@@ -36,7 +36,7 @@ for (j in c("hosp", "amb")) {
     function(ano) {
       # definindo termos da buscas no dados abertos -----------------------
 
-      cat(glue::glue("\n======= BASE: {stringr::str_to_upper(j)}, ANO: {ano} =======\n"))
+      cat(glue::glue("\n========================== BASE: {stringr::str_to_upper(j)}, ANO: {ano} ==========================\n"))
 
       urls <- purrr::map(
         bases,
@@ -175,6 +175,8 @@ for (j in c("hosp", "amb")) {
       fs::dir_delete("output/export/")
 
       fs::dir_delete(glue::glue("data/proc_{j}_db/"))
+
+      gc()
     }
   )
 }
