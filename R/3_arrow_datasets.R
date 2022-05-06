@@ -28,13 +28,13 @@ db <- purrr::map2(
 termos_db <- list(
   purrr::map2_dfr(
     .x = fs::dir_ls("output/", regexp = "termos_hosp"),
-    .y = c(2018, 2019, 2020),
+    .y = 2018:2020,
     ~ arrow::read_parquet(.x) |>
       dplyr::mutate(ano = .y, db = "hosp")
   ),
   purrr::map2_dfr(
     .x = fs::dir_ls("output/", regexp = "termos_amb"),
-    .y = c(2018, 2019, 2020),
+    .y = 2018:2020,
     ~ arrow::read_parquet(.x) |>
       dplyr::mutate(ano = .y, db = "amb")
   )
