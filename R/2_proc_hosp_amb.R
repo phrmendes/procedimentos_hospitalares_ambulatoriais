@@ -36,7 +36,7 @@ for (j in c("hosp", "amb")) {
     function(ano) {
       # definindo termos da buscas no dados abertos -----------------------
 
-      cat(glue::glue("\n========================== BASE: {stringr::str_to_upper(j)}, ANO: {ano} ==========================\n"))
+      cat(glue::glue("\n========== BASE: {stringr::str_to_upper(j)}, ANO: {ano} ==========\n"))
 
       urls <- purrr::map(
         bases,
@@ -56,36 +56,21 @@ for (j in c("hosp", "amb")) {
 
       cat("\n===== DOWNLOAD ====\n")
 
-      if (j == "hosp") {
-        cols_det <- c(
-          "id_evento_atencao_saude",
-          "ano_mes_evento",
-          "cd_procedimento",
-          "cd_tabela_referencia",
-          "uf_prestador",
-          "qt_item_evento_informado",
-          "vl_item_evento_informado",
-          "ind_tabela_propria"
-        )
-      } else {
-        cols_det <- c(
-          "id_evento_atencao_saude",
-          "dt_realizacao",
-          "cd_procedimento",
-          "cd_tabela_referencia",
-          "uf_prestador",
-          "qt_item_evento_informado",
-          "vl_item_evento_informado",
-          "ind_tabela_propria"
-        )
-      }
-
       pbapply::pblapply(
-        urls[[1]],
+        seq_len(nrow(urls[[1]])),
         function(i) {
           unpack_write_parquet(
-            url = i,
-            cols = cols_det
+            url = urls[[1]]$url[i],
+            date = urls[[1]]$date[i],
+            cols = c(
+              "id_evento_atencao_saude",
+              "cd_procedimento",
+              "cd_tabela_referencia",
+              "uf_prestador",
+              "qt_item_evento_informado",
+              "vl_item_evento_informado",
+              "ind_tabela_propria"
+            )
           )
 
           gc()
@@ -94,10 +79,11 @@ for (j in c("hosp", "amb")) {
       )
 
       pbapply::pblapply(
-        urls[[2]],
+        seq_len(nrow(urls[[2]])),
         function(i) {
           unpack_write_parquet(
-            url = i,
+            url = urls[[2]]$url[i],
+            date = urls[[2]]$date[i],
             cols = c(
               "id_evento_atencao_saude",
               "faixa_etaria",
@@ -137,9 +123,14 @@ for (j in c("hosp", "amb")) {
           cl = parallel::detectCores()
         )
 
-        length_parquet <- length(fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet"))
+        length_parquet <- length(
+          fs::dir_ls(
+            path = "data/parquet/",
+            regexp = "*DET.parquet"
+          )
+        )
 
-        if(length_parquet == 0) break()
+        if (length_parquet == 0) break()
       }
 
       fs::dir_delete("data/parquet/")

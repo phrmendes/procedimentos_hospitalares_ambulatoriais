@@ -49,9 +49,11 @@ db <- db[
   !c("mes", "ano")
 ]
 
-termos_db[
+termos_db <- termos_db[
   ,
   ano :=  paste0("1-1-", ano)
+][
+  termos != "sem_info"
 ]
 
 arrow::write_dataset(

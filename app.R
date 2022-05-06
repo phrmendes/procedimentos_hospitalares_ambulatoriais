@@ -12,6 +12,7 @@ library(MetBrewer)
 library(shiny)
 library(sf)
 library(arrow)
+library(duckdb)
 library(memoise)
 library(tmaptools)
 library(rlang)
@@ -32,7 +33,7 @@ termos <- arrow::open_dataset("output/db_termos_shiny/")
 db <- arrow::open_dataset("output/db_shiny/")
 
 vars_shiny <- list(
-  categoria = c("Faixa etária", "Sexo", "UF"),
+  categoria = c("Faixa etária", "Sexo", "UF Prestador"),
   estatistica = c("Quantidade total", "Valor total", "Valor médio")
 )
 
@@ -46,7 +47,7 @@ header <- bs4Dash::dashboardHeader(
       type = "text/css",
       ".shiny-output-error { visibility: hidden; }",
       ".shiny-output-error:before { visibility: hidden; }"
-    ) # desativando mensagens de erro
+    )
   )
 )
 
@@ -69,7 +70,10 @@ body <- bs4Dash::dashboardBody(
       )
     )
   ),
-  h2("Procedimentos Médicos e Ambulatoriais", style = "font-family: 'Open Sans', sans-serif;"),
+  h2(
+    "Procedimentos Médicos e Ambulatoriais",
+    style = "font-family: 'Open Sans', sans-serif;"
+  ),
   shiny::fluidRow(
     shiny::column(
       width = 4,
@@ -132,10 +136,18 @@ body <- bs4Dash::dashboardBody(
     )
   ),
   shiny::fluidRow(
-    bs4Dash::infoBoxOutput(width = 3, "proc"),
-    bs4Dash::infoBoxOutput(width = 3, "qtd_tot"),
-    bs4Dash::infoBoxOutput(width = 3, "vl_tot"),
-    bs4Dash::infoBoxOutput(width = 3, "mean")
+    bs4Dash::infoBoxOutput(
+      width = 3,
+      "proc"
+    ),
+    bs4Dash::infoBoxOutput(
+      width = 3,
+      "qtd_tot"
+    ),
+    bs4Dash::infoBoxOutput(
+      width = 3,
+      "vl_tot"
+    )
   ),
   shiny::fluidRow(
     bs4Dash::box(
@@ -153,7 +165,7 @@ body <- bs4Dash::dashboardBody(
   ),
   shiny::fluidRow(
     shiny::conditionalPanel(
-      condition = "input.categoria == 'UF' && input.button != 0",
+      condition = "input.categoria == 'UF Prestador' && input.button != 0",
       bs4Dash::box(
         collapsible = FALSE,
         shinycssloaders::withSpinner(plotly::plotlyOutput("map")),
@@ -187,7 +199,7 @@ body <- bs4Dash::dashboardBody(
 # ui ----------------------------------------------------------------------
 
 ui <- bs4Dash::dashboardPage(
-  title = "Abramge", # título da aba do dashboard
+  title = "Abramge",
   header, sidebar, body
 )
 
@@ -197,21 +209,48 @@ server <- function(input, output, session) {
 
   # reactive variables ----------------------------------------------------
 
-  option_base_procedimentos <- shiny::eventReactive(input$busca, {
-    input$base_procedimentos
-  })
-  option_procedimento <- shiny::eventReactive(input$busca, {
-    input$procedimento
-  })
-  option_ano <- shiny::eventReactive(input$busca, {
-    input$ano
-  })
-  option_estatistica <- shiny::eventReactive(input$busca, {
-    input$estatistica
-  })
-  option_categoria <- shiny::eventReactive(input$busca, {
-    input$categoria
-  })
+  # option_procedimento = "ANATOMIA PATOLÓGICA E CITOPATOLOGIA"
+  # option_ano = "2019"
+  # option_estatistica = "Quantidade total"
+  # option_categoria = "UF Prestador"
+  # option_db = "amb"
+  # infoboxes_db = "amb"
+
+  option_base_procedimentos <- shiny::eventReactive(
+    input$busca,
+    {
+      input$base_procedimentos
+    }
+  )
+
+  option_procedimento <- shiny::eventReactive(
+    input$busca,
+    {
+      input$procedimento
+    }
+  )
+
+  option_ano <- shiny::eventReactive(
+    input$busca,
+    {
+      input$ano
+    }
+  )
+
+  option_estatistica <- shiny::eventReactive(
+    input$busca,
+    {
+      input$estatistica
+    }
+  )
+
+  option_categoria <- shiny::eventReactive(
+    input$busca,
+    {
+      input$categoria
+    }
+  )
+
   option_db <- shiny::reactive({
     if (option_base_procedimentos() == "Hospitalares") {
       db <- "hosp"
@@ -221,7 +260,8 @@ server <- function(input, output, session) {
 
     return(db)
   })
-  input_db <- shiny::reactive({
+
+  infoboxes_db <- shiny::reactive({
     if (input$base_procedimentos == "Hospitalares") {
       db <- "hosp"
     } else {
@@ -233,11 +273,14 @@ server <- function(input, output, session) {
 
   # gc --------------------------------------------------------------------
 
-  shiny::eventReactive(input$busca, {
-    Sys.sleep(4)
+  shiny::eventReactive(
+    input$busca,
+    {
+      Sys.sleep(4)
 
-    gc()
-  })
+      gc()
+    }
+  )
 
   # dados anuais ----------------------------------------------------------
 
@@ -249,7 +292,7 @@ server <- function(input, output, session) {
     dados_anuais <- db |>
       dplyr::filter(
         db == option_db(),
-        tipo == stringr::str_to_lower(option_categoria()),
+        tipo == janitor::make_clean_names(option_categoria()),
         termo == option_procedimento(),
         mes_ano %in% periodo
       ) |>
@@ -285,7 +328,7 @@ server <- function(input, output, session) {
     dados_mensais <- db |>
       dplyr::filter(
         db == option_db(),
-        tipo == stringr::str_to_lower(option_categoria()),
+        tipo == janitor::make_clean_names(option_categoria()),
         termo == option_procedimento(),
         mes_ano %in% periodo
       ) |>
@@ -304,12 +347,9 @@ server <- function(input, output, session) {
         dplyr::summarise({{ estatistica }} := mean({{ estatistica }}))
     }
 
-    dados_mensais <- dados_mensais |>
-      dplyr::ungroup() |>
-      dplyr::collect()
-
-    if (option_categoria() == "UF") {
+    if (option_categoria() == "UF Prestador") {
       dados_mensais <- dados_mensais |>
+        arrow::to_duckdb() |>
         dplyr::mutate(
           categoria = dplyr::case_when(
             categoria %in% c("AC", "AM", "AP", "PA", "RO", "RR", "TO") ~ "Norte",
@@ -323,12 +363,23 @@ server <- function(input, output, session) {
 
       if (option_estatistica() %in% c(vars_shiny$estatistica[1:2])) {
         dados_mensais <- dados_mensais |>
-          dplyr::summarise({{ estatistica }} := sum({{ estatistica }}))
+          dplyr::summarise({{ estatistica }} := sum(
+            {{ estatistica }},
+            na.rm = TRUE
+          ))
       } else {
         dados_mensais <- dados_mensais |>
-          dplyr::summarise({{ estatistica }} := mean({{ estatistica }}))
+          dplyr::summarise(
+            {{ estatistica }} := mean(
+              {{ estatistica }},
+              na.rm = TRUE
+            )
+          )
       }
     }
+
+    dados_mensais <- dados_mensais |>
+      dplyr::collect()
 
     return(dados_mensais)
   })
@@ -339,13 +390,13 @@ server <- function(input, output, session) {
     periodo <- paste0("1-1-", input$ano)
 
     n <- termos |>
-      dplyr::filter(ano == periodo & db == input_db()) |>
+      dplyr::filter(ano == periodo & db == infoboxes_db()) |>
       dplyr::summarise(n = n()) |>
       dplyr::collect() |>
       dplyr::pull()
 
     bs4Dash::infoBox(
-      title = shiny::HTML("Nº de procedimentos disponíveis na base:"),
+      title = shiny::HTML("Nº de procedimentos disponíveis para consulta:"),
       value = prettyNum(n, big.mark = "\\."),
       icon = shiny::icon("notes-medical", lib = "font-awesome"),
       color = "primary"
@@ -358,28 +409,43 @@ server <- function(input, output, session) {
     qtd_tot <- db |>
       dplyr::filter(
         mes_ano %in% periodo,
-        termo == input$procedimento,
-        db == input_db(),
+        db == infoboxes_db(),
         tipo == "sexo"
       ) |>
       dplyr::summarise(tot_qt = sum(tot_qt)) |>
       dplyr::collect() |>
       dplyr::pull()
 
-    qtd_tot_pretty <- prettyNum(qtd_tot, big.mark = "\\.", decimal.mark = ",")
+    qtd_tot_pretty <- prettyNum(
+      qtd_tot,
+      big.mark = "\\.",
+      decimal.mark = ","
+    )
 
     n_dots <- stringr::str_count(qtd_tot_pretty, "\\.")
 
     if (n_dots >= 3) {
-      qtd_tot <- prettyNum(round(qtd_tot / 10^9, 2), big.mark = "\\.", decimal.mark = ",")
+      qtd_tot <- prettyNum(
+        round(qtd_tot / 10^9, 2),
+        big.mark = "\\.",
+        decimal.mark = ","
+      )
 
       qtd_tot <- glue::glue("{qtd_tot} bilhões")
     } else if (n_dots < 3 & n_dots >= 2) {
-      qtd_tot <- prettyNum(round(qtd_tot / 10^6, 2), big.mark = "\\.", decimal.mark = ",")
+      qtd_tot <- prettyNum(
+        round(qtd_tot / 10^6, 2),
+        big.mark = "\\.",
+        decimal.mark = ","
+      )
 
       qtd_tot <- glue::glue("{qtd_tot} milhões")
     } else if (n_dots < 2 & n_dots >= 1) {
-      qtd_tot <- prettyNum(round(qtd_tot / 10^3, 2), big.mark = "\\.", decimal.mark = ",")
+      qtd_tot <- prettyNum(
+        round(qtd_tot / 10^3, 2),
+        big.mark = "\\.",
+        decimal.mark = ","
+      )
 
       qtd_tot <- glue::glue("{qtd_tot} mil")
     } else {
@@ -387,7 +453,7 @@ server <- function(input, output, session) {
     }
 
     bs4Dash::infoBox(
-      title = shiny::HTML("Procedimentos realizados durante o ano:"),
+      title = shiny::HTML("Quantidade de procedimentos realizados durante o ano:"),
       value = qtd_tot,
       icon = shiny::icon("calendar", lib = "font-awesome"),
       color = "orange"
@@ -400,28 +466,43 @@ server <- function(input, output, session) {
     vl_tot <- db |>
       dplyr::filter(
         mes_ano %in% periodo,
-        termo == input$procedimento,
-        db == input_db(),
+        db == infoboxes_db(),
         tipo == "sexo"
       ) |>
       dplyr::summarise(vl_tot = sum(tot_vl)) |>
       dplyr::collect() |>
       dplyr::pull()
 
-    vl_tot_pretty <- prettyNum(vl_tot, big.mark = "\\.", decimal.mark = ",")
+    vl_tot_pretty <- prettyNum(
+      vl_tot,
+      big.mark = "\\.",
+      decimal.mark = ","
+    )
 
     n_dots <- stringr::str_count(vl_tot_pretty, "\\.")
 
     if (n_dots >= 3) {
-      vl_tot <- prettyNum(round(vl_tot / 10^9, 2), big.mark = "\\.", decimal.mark = ",")
+      vl_tot <- prettyNum(
+        round(vl_tot / 10^9, 2),
+        big.mark = "\\.",
+        decimal.mark = ","
+      )
 
       vl_tot <- glue::glue("R$ {vl_tot} bilhões")
     } else if (n_dots < 3 & n_dots >= 2) {
-      vl_tot <- prettyNum(round(vl_tot / 10^6, 2), big.mark = "\\.", decimal.mark = ",")
+      vl_tot <- prettyNum(
+        round(vl_tot / 10^6, 2),
+        big.mark = "\\.",
+        decimal.mark = ","
+      )
 
       vl_tot <- glue::glue("R$ {vl_tot} milhões")
     } else if (n_dots < 2 & n_dots >= 1) {
-      vl_tot <- prettyNum(round(vl_tot / 10^3, 2), big.mark = "\\.", decimal.mark = ",")
+      vl_tot <- prettyNum(
+        round(vl_tot / 10^3, 2),
+        big.mark = "\\.",
+        decimal.mark = ","
+      )
 
       vl_tot <- glue::glue("R$ {vl_tot} mil")
     } else {
@@ -429,34 +510,10 @@ server <- function(input, output, session) {
     }
 
     bs4Dash::infoBox(
-      title = shiny::HTML("Valor total dos procedimentos:"),
+      title = shiny::HTML("Valor total gasto em procedimentos no ano:"),
       value = vl_tot,
       icon = shiny::icon("coins", lib = "font-awesome"),
       color = "lightblue"
-    )
-  })
-
-  output$mean <- bs4Dash::renderInfoBox({
-    periodo <- paste0("1-", 1:12, "-", input$ano)
-
-    mean <- db |>
-      dplyr::filter(
-        mes_ano %in% periodo,
-        termo == input$procedimento,
-        db == input_db(),
-        tipo == "sexo"
-      ) |>
-      dplyr::summarise(mean = mean(mean_vl)) |>
-      dplyr::collect() |>
-      dplyr::pull()
-
-    mean <- prettyNum(round(mean, 2), big.mark = "\\.", decimal.mark = ",")
-
-    bs4Dash::infoBox(
-      title = shiny::HTML("Valor médio nacional do procedimento:"),
-      value = glue::glue("R$ {mean}"),
-      icon = shiny::icon("dollar-sign", lib = "font-awesome"),
-      color = "warning"
     )
   })
 
@@ -510,14 +567,15 @@ server <- function(input, output, session) {
           hjust = 0.5
         )
       ) +
-      scale_fill_manual(values = MetBrewer::met.brewer(
-        name = "Hokusai2",
-        n = 27,
-        type = "continuous"
-      ))
+      scale_fill_manual(
+        values = MetBrewer::met.brewer(
+          name = "Hokusai2",
+          n = 27,
+          type = "continuous"
+        )
+      )
 
     plotly::ggplotly(plot_bar)
-
   })
 
   # map plot --------------------------------------------------------------
@@ -611,7 +669,11 @@ server <- function(input, output, session) {
       labs(
         x = "",
         y = option_estatistica(),
-        color = ifelse(option_categoria() == "UF", "Região", option_categoria())
+        color = ifelse(
+          option_categoria() == "UF Prestador",
+          "Região",
+          option_categoria()
+        )
       ) +
       theme_minimal() +
       theme(

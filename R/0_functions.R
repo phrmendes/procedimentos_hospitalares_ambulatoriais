@@ -18,7 +18,8 @@ base <- function(ano, estado, mes, base, url_base, proc) {
         data,
         ~ tibble::tibble(
           e = mes,
-          f = glue::glue("_{proc}_{base}.zip")
+          f = glue::glue("_{proc}_{base}.zip"),
+          date = glue::glue("{mes}-{ano}")
         )
       )
     ) |>
@@ -26,16 +27,14 @@ base <- function(ano, estado, mes, base, url_base, proc) {
     tidyr::unite("url",
       c(a, b, d, c, e, f),
       sep = ""
-    ) |>
-    purrr::flatten_chr()
+    )
 
   return(urls)
 }
 
 # função de descompactação, leitura e escrita na database (hosp) ----------
 
-unpack_write_parquet <- function(url, cols) {
-
+unpack_write_parquet <- function(url, date, cols) {
   tempdir <- fs::dir_create(glue::glue("{tempdir()}/downloads"))
 
   temp <- tempfile(fileext = ".zip", tmpdir = tempdir)
@@ -72,15 +71,21 @@ unpack_write_parquet <- function(url, cols) {
     janitor::clean_names() |>
     data.table::as.data.table()
 
-  df[, id_evento_atencao_saude := as.character(id_evento_atencao_saude)]
+  m_y <- stringr::str_split(date, pattern = "-") |> purrr::flatten_chr()
+
+  df[
+    ,
+    ':='(
+      id_evento_atencao_saude = as.character(id_evento_atencao_saude),
+      mes = m_y[1],
+      ano = m_y[2]
+    )
+  ]
 
   if (stringr::str_detect(url, "DET")) {
-    df[
+    df <- df[
       (ind_tabela_propria == 1 | cd_tabela_referencia %in% c("98", "90")),
       cd_procedimento := 0
-    ][
-      ,
-      c("ano", "mes") := data.table::tstrsplit(get(cols[2]), "-", fixed = TRUE)
     ][
       ,
       cd_procedimento := data.table::fifelse(
@@ -88,9 +93,10 @@ unpack_write_parquet <- function(url, cols) {
         "sem_info",
         as.character(as.numeric(cd_procedimento))
       )
+    ][
+      ,
+      !c("ind_tabela_propria", "cd_tabela_referencia")
     ]
-
-    data.table::set(df, , c("ind_tabela_propria", "cd_tabela_referencia", cols[2]), NULL)
   }
 
   arrow::write_parquet(

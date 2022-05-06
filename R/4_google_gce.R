@@ -1,3 +1,7 @@
+# ------------------------- #
+# --- VM - GOOGLE CLOUD --- #
+# ------------------------- #
+
 pacman::p_load(googleComputeEngineR, install = FALSE)
 
 vm <- googleComputeEngineR::gce_vm(
@@ -10,5 +14,7 @@ vm <- googleComputeEngineR::gce_vm(
 )
 
 googleComputeEngineR::gce_vm_start("dashboard-vm")
+
 googleComputeEngineR::gce_vm_stop("dashboard-vm")
+
 googleComputeEngineR::gce_vm_delete("dashboard-vm")
