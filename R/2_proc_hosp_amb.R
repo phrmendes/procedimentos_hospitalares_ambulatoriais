@@ -83,7 +83,6 @@ for (j in c("hosp", "amb")) {
         function(i) {
           unpack_write_parquet(
             url = urls[[2]]$url[i],
-            date = urls[[2]]$date[i],
             cols = c(
               "id_evento_atencao_saude",
               "faixa_etaria",
@@ -104,34 +103,23 @@ for (j in c("hosp", "amb")) {
 
       tuss <- arrow::read_parquet("data/tabelas_tuss.parquet")
 
-      repeat{
-        det_db <- fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet")
+      det_db <- fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet")
 
-        cons_db <- fs::dir_ls(path = "data/parquet/", regexp = "*CONS.parquet")
+      cons_db <- fs::dir_ls(path = "data/parquet/", regexp = "*CONS.parquet")
 
-        pbapply::pblapply(
-          seq_len(length(det_db)),
-          function(i) {
-            merge_db(
-              path_1 = det_db[i],
-              path_2 = cons_db[i],
-              termos = tuss
-            )
-
-            gc()
-          },
-          cl = parallel::detectCores()
-        )
-
-        length_parquet <- length(
-          fs::dir_ls(
-            path = "data/parquet/",
-            regexp = "*DET.parquet"
+      pbapply::pblapply(
+        seq_len(length(det_db)),
+        function(i) {
+          merge_db(
+            path_1 = det_db[i],
+            path_2 = cons_db[i],
+            termos = tuss
           )
-        )
 
-        if (length_parquet == 0) break()
-      }
+          gc()
+        },
+        cl = parallel::detectCores()
+      )
 
       fs::dir_delete("data/parquet/")
 
@@ -144,6 +132,8 @@ for (j in c("hosp", "amb")) {
         names = glue::glue("base_{j}_{c('uf', 'idade', 'sexo')}_{ano}"),
         types = c("uf", "faixa etária", "sexo")
       )
+
+      fs::dir_create("output/export")
 
       purrr::walk(
         1:3,
