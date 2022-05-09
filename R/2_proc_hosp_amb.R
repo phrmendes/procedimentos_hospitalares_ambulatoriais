@@ -147,17 +147,17 @@ for (j in c("hosp", "amb")) {
         )
       )
 
-      base_hosp <- purrr::map(
+      db <- purrr::map(
         fs::dir_ls("output/export/"),
         ~ arrow::read_parquet(.x) |>
           dplyr::collect()
       ) |>
         data.table::rbindlist()
 
-      base_hosp[, .(termos = collapse::funique(termo))] |>
+      db[, .(termos = collapse::funique(termo))] |>
         arrow::write_parquet(glue::glue("output/termos_{j}_{ano}.parquet"))
 
-      arrow::write_parquet(base_hosp, glue::glue("output/base_{j}_{ano}.parquet"))
+      arrow::write_parquet(db, glue::glue("output/base_{j}_{ano}.parquet"))
 
       fs::dir_delete("output/export/")
 
