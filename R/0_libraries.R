@@ -8,7 +8,10 @@ if (!require("pacman")) {
 }
 
 if (!require("arrow")) {
-  install.packages("arrow", repos = "https://packagemanager.rstudio.com/all/__linux__/focal/latest")
+  install.packages(
+    "arrow",
+    repos = "https://packagemanager.rstudio.com/all/__linux__/focal/latest"
+  )
   require("arrow")
 }
 

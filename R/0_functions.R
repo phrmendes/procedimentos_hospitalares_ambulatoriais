@@ -11,18 +11,36 @@ base <- function(ano, estado, mes, base, url_base, proc) {
     c = glue::glue("_{ano}"),
   ) |>
     dplyr::group_by(a, b, c) |>
-    tidyr::nest() |>
-    dplyr::mutate(
-      d = glue::glue("/{b}"),
-      data = purrr::map(
-        data,
-        ~ tibble::tibble(
-          e = mes,
-          f = glue::glue("_{proc}_{base}.zip"),
-          date = glue::glue("{mes}-{ano}")
+    tidyr::nest()
+
+  if (base == "DET") {
+    urls <- urls |>
+      dplyr::mutate(
+        d = glue::glue("/{b}"),
+        data = purrr::map(
+          data,
+          ~ tibble::tibble(
+            e = mes,
+            f = glue::glue("_{proc}_{base}.zip"),
+            date = glue::glue("{mes}-{ano}")
+          )
         )
       )
-    ) |>
+  } else {
+    urls <- urls |>
+      dplyr::mutate(
+        d = glue::glue("/{b}"),
+        data = purrr::map(
+          data,
+          ~ tibble::tibble(
+            e = mes,
+            f = glue::glue("_{proc}_{base}.zip")
+          )
+        )
+      )
+  }
+
+  urls <- urls |>
     tidyr::unnest(cols = c(data)) |>
     tidyr::unite("url",
       c(a, b, d, c, e, f),
@@ -71,19 +89,16 @@ unpack_write_parquet <- function(url, date, cols) {
     janitor::clean_names() |>
     data.table::as.data.table()
 
-  m_y <- stringr::str_split(date, pattern = "-") |> purrr::flatten_chr()
-
-  df[
-    ,
-    ':='(
-      id_evento_atencao_saude = as.character(id_evento_atencao_saude),
-      mes = m_y[1],
-      ano = m_y[2]
-    )
-  ]
-
   if (stringr::str_detect(url, "DET")) {
+    m_y <- stringr::str_split(date, pattern = "-") |> purrr::flatten_chr()
+
     df <- df[
+      ,
+      ':='(
+        mes = m_y[1],
+        ano = m_y[2]
+      )
+    ][
       (ind_tabela_propria == 1 | cd_tabela_referencia %in% c("98", "90")),
       cd_procedimento := 0
     ][
@@ -98,6 +113,26 @@ unpack_write_parquet <- function(url, date, cols) {
       !c("ind_tabela_propria", "cd_tabela_referencia")
     ]
   }
+
+  if (stringr::str_detect(url, "CONS")) {
+    df[
+      ,
+      faixa_etaria := tidyfast::dt_case_when(
+        faixa_etaria == "<1" ~ "< 1",
+        faixa_etaria == "80 ou mais" ~ "80 <",
+        faixa_etaria == "Não identificado" ~ "N. I.",
+        TRUE ~ faixa_etaria
+      )
+    ][
+      ,
+      sexo := tidyfast::dt_case_when(
+        sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
+        TRUE ~ sexo
+      )
+    ]
+  }
+
+  df[, id_evento_atencao_saude := as.character(id_evento_atencao_saude)]
 
   arrow::write_parquet(
     x = df,
@@ -229,50 +264,31 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
             on = x
           ],
           by = .(cd_procedimento, termo, ano, mes) # completando UF's faltantes
-        ][
-          ,
-          tipo := x
         ]
       } else if (x == "faixa_etaria") {
         df <- df[
-          ,
-          faixa_etaria := tidyfast::dt_case_when(
-            faixa_etaria == "<1" ~ "< 1",
-            faixa_etaria == "80 ou mais" ~ "80 <",
-            TRUE ~ faixa_etaria
-          )
-        ][
           ,
           .SD[
             .(faixa_etaria = complete_vars),
             on = x
           ],
           by = .(cd_procedimento, termo, ano, mes) # completando faixas etárias faltantes
-        ][
-          ,
-          tipo := x
         ]
       } else {
         df <- df[
-          ,
-          sexo := tidyfast::dt_case_when(
-            sexo %not_in% c("Masculino", "Feminino") ~ "N. I.",
-            TRUE ~ sexo
-          )
-        ][
           ,
           .SD[
             .(sexo = complete_vars),
             on = x
           ],
           by = .(cd_procedimento, termo, ano, mes) # completando sexos faltantes
-        ][
-          ,
-          tipo := x
         ]
       }
 
       df <- df[
+        ,
+        tipo := x
+      ][
         ,
         furrr::future_map(
           .SD,
@@ -286,8 +302,6 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
         old = paste0(x),
         new = "categoria"
       )
-
-      fs::dir_create("output/export")
 
       arrow::write_parquet(df, glue::glue("output/export/{export_name}_{i}.parquet"))
     }

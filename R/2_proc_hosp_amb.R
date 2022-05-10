@@ -104,34 +104,23 @@ for (j in c("hosp", "amb")) {
 
       fs::dir_create(glue::glue("data/proc_{j}_db/"))
 
-      repeat{
-        det_db <- fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet")
+      det_db <- fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet")
 
-        cons_db <- fs::dir_ls(path = "data/parquet/", regexp = "*CONS.parquet")
+      cons_db <- fs::dir_ls(path = "data/parquet/", regexp = "*CONS.parquet")
 
-        pbapply::pblapply(
-          seq_len(length(det_db)),
-          function(i) {
-            merge_db(
-              path_1 = det_db[i],
-              path_2 = cons_db[i],
-              termos = tuss
-            )
-
-            gc()
-          },
-          cl = parallel::detectCores()
-        )
-
-        length_parquet <- length(
-          fs::dir_ls(
-            path = "data/parquet/",
-            regexp = "*DET.parquet"
+      pbapply::pblapply(
+        seq_len(length(det_db)),
+        function(i) {
+          merge_db(
+            path_1 = det_db[i],
+            path_2 = cons_db[i],
+            termos = tuss
           )
-        )
 
-        if (length_parquet == 0) break()
-      }
+          gc()
+        },
+        cl = parallel::detectCores()
+      )
 
       fs::dir_delete("data/parquet/")
 
