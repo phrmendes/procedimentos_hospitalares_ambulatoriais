@@ -28,6 +28,8 @@ urls_base <- c(
   amb = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/"
 )
 
+tuss <- arrow::read_parquet("data/tabelas_tuss.parquet")
+
 # função de download ------------------------------------------------------
 
 for (j in c("hosp", "amb")) {
@@ -101,8 +103,6 @@ for (j in c("hosp", "amb")) {
       cat("\n===== MERGE ====\n")
 
       fs::dir_create(glue::glue("data/proc_{j}_db/"))
-
-      tuss <- arrow::read_parquet("data/tabelas_tuss.parquet")
 
       repeat{
         det_db <- fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet")

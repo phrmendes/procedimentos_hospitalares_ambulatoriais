@@ -141,7 +141,11 @@ merge_db <- function(path_1, path_2, termos) {
       "sem_info",
       termo
     )
+  ][
+    cd_procedimento %not_in% termos$cd_procedimento,
+    termo := "sem_info"
   ]
+
 
   name <- stringr::str_extract(
     path_1,
