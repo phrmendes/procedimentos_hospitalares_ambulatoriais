@@ -145,18 +145,17 @@ unpack_write_parquet <- function(url, date, cols) {
 # função de merge mês a mês -----------------------------------------------
 
 merge_db <- function(path_1, path_2, termos) {
-  db_1 <- arrow::read_parquet(path_1) |>
-    data.table::as.data.table(key = "id_evento_atencao_saude")
 
-  db_2 <- arrow::read_parquet(path_2) |>
-    data.table::as.data.table(key = "id_evento_atencao_saude")
+  db_1 <- arrow::open_dataset(path_1)
 
-  db_3 <- data.table::merge.data.table(
-    x = db_1,
-    y = db_2,
-    by = "id_evento_atencao_saude",
-    all.x = TRUE
-  )
+  db_2 <- arrow::open_dataset(path_2)
+
+  db_3 <- db_1 |>
+    dplyr::left_join(
+      db_2,
+      by = "id_evento_atencao_saude"
+    ) |>
+    dplyr::compute()
 
   name <- stringr::str_extract(
     path_1,
@@ -174,6 +173,13 @@ merge_db <- function(path_1, path_2, termos) {
     db_3,
     glue::glue("data/proc_{db}_db/{name}.parquet")
   )
+
+  purrr::walk(
+    list(db_1, db_2),
+    ~ rm(.x)
+  )
+
+  gc()
 
   purrr::walk(
     list(path_1, path_2),
@@ -251,7 +257,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, months) {
             .(faixa_etaria = complete_vars),
             on = x
           ],
-          by = .(cd_procedimento, faixa_etaria, ano, mes) # completando faixas etárias faltantes
+          by = .(cd_procedimento, ano, mes) # completando faixas etárias faltantes
         ]
       } else {
         df <- df[
@@ -260,7 +266,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, months) {
             .(sexo = complete_vars),
             on = x
           ],
-          by = .(cd_procedimento, sexo, ano, mes) # completando sexos faltantes
+          by = .(cd_procedimento, ano, mes) # completando sexos faltantes
         ]
       }
 

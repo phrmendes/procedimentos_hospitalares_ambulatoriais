@@ -149,17 +149,17 @@ for (j in c("hosp", "amb")) {
         )
       )
 
-      db <- arrow::open_dataset("data/proc_hosp_db/") |>
-        dplyr::collect()
+      db <- arrow::open_dataset("output/export") |>
+        dplyr::compute()
 
       arrow::write_parquet(db, glue::glue("output/base_{j}_{ano}.parquet"))
+
+      gc()
 
       purrr::walk(
         c("output/export/", glue::glue("data/proc_{j}_db/")),
         fs::dir_delete
       )
-
-      gc()
     }
   )
 }
