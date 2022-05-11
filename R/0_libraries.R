@@ -22,21 +22,13 @@ pacman::p_load(
   tidyverse,
   glue,
   tidyfast,
-  usethis,
   furrr,
   pbapply,
-  googleComputeEngineR,
   janitor,
   styler,
   fs,
-  memoise,
   miniUI,
   parallel,
   lintr,
   install = FALSE
 )
-
-if (!require("geobr")) {
-  pacman::p_load_gh("ipeaGIT/geobr/r-package", install = TRUE)
-  require("geobr")
-}

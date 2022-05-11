@@ -30,9 +30,6 @@ urls_base <- c(
   amb = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/"
 )
 
-termos <- arrow::read_parquet("data/tabelas_tuss.parquet") |>
-  dplyr::pull(cd_procedimento)
-
 # função de download ------------------------------------------------------
 
 for (j in c("hosp", "amb")) {
@@ -59,7 +56,7 @@ for (j in c("hosp", "amb")) {
 
       fs::dir_create("data/parquet/")
 
-      cat("\n===== DOWNLOAD ====\n")
+      cat("\n===== DOWNLOAD =====\n")
 
       pbapply::pblapply(
         seq_len(nrow(urls[[1]])),
@@ -103,7 +100,7 @@ for (j in c("hosp", "amb")) {
 
       # merge entre bases DET e CONS --------------------------------------
 
-      cat("\n===== MERGE ====\n")
+      cat("\n===== MERGE =====\n")
 
       fs::dir_create(glue::glue("data/proc_{j}_db/"))
 
@@ -116,8 +113,7 @@ for (j in c("hosp", "amb")) {
         function(i) {
           merge_db(
             path_1 = det_db[i],
-            path_2 = cons_db[i],
-            termos = termos
+            path_2 = cons_db[i]
           )
 
           gc()
@@ -129,7 +125,7 @@ for (j in c("hosp", "amb")) {
 
       # tratando database -------------------------------------------------
 
-      cat("\n===== EXPORT ====\n")
+      cat("\n===== EXPORT =====\n")
 
       estatisticas <- list(
         cols = c("uf_prestador", "faixa_etaria", "sexo"),

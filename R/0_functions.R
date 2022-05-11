@@ -144,7 +144,7 @@ unpack_write_parquet <- function(url, date, cols) {
 
 # função de merge mês a mês -----------------------------------------------
 
-merge_db <- function(path_1, path_2, termos) {
+merge_db <- function(path_1, path_2) {
 
   db_1 <- arrow::open_dataset(path_1)
 

@@ -758,25 +758,6 @@
       "Hash": "177475892cf4a55865868527654a7741",
       "Requirements": []
     },
-    "geobr": {
-      "Package": "geobr",
-      "Version": "1.6.5999",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteRepo": "geobr",
-      "RemoteUsername": "ipeaGIT",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "b4666788e9931508a5d5f4bb45ac8d2684bcf769",
-      "RemoteSubdir": "r-package",
-      "Hash": "7e696c393aebc868dbd1a4c7daa227e2",
-      "Requirements": [
-        "curl",
-        "data.table",
-        "httr",
-        "sf"
-      ]
-    },
     "gert": {
       "Package": "gert",
       "Version": "1.6.0",
