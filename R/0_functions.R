@@ -151,36 +151,12 @@ merge_db <- function(path_1, path_2, termos) {
   db_2 <- arrow::read_parquet(path_2) |>
     data.table::as.data.table(key = "id_evento_atencao_saude")
 
-  termos <- data.table::as.data.table(termos, key = "cd_procedimento")
-
   db_3 <- data.table::merge.data.table(
     x = db_1,
     y = db_2,
     by = "id_evento_atencao_saude",
     all.x = TRUE
   )
-
-  data.table::setkey(db_3, "cd_procedimento")
-
-  db_3 <- data.table::merge.data.table(
-    x = db_3,
-    y = termos,
-    by = "cd_procedimento",
-    all.x = TRUE
-  )
-
-  db_3[
-    ,
-    termo := data.table::fifelse(
-      cd_procedimento == "sem_info",
-      "sem_info",
-      termo
-    )
-  ][
-    cd_procedimento %not_in% termos$cd_procedimento,
-    termo := "sem_info"
-  ]
-
 
   name <- stringr::str_extract(
     path_1,
@@ -194,7 +170,10 @@ merge_db <- function(path_1, path_2, termos) {
     )
   )
 
-  arrow::write_parquet(db_3, glue::glue("data/proc_{db}_db/{name}.parquet"))
+  arrow::write_parquet(
+    db_3,
+    glue::glue("data/proc_{db}_db/{name}.parquet")
+  )
 
   purrr::walk(
     list(path_1, path_2),
@@ -222,7 +201,7 @@ bind <- function(a, b, c, d) {
 
 # função de tratamento da database do shinyapp ----------------------------
 
-export_parquet <- function(x, complete_vars, db_name, export_name, type, months) {
+export_parquet <- function(x, complete_vars, db_name, export_name, months) {
   db <- arrow::open_dataset(glue::glue("data/{db_name}"))
 
   group_by_var <- as.symbol(x)
@@ -232,7 +211,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
     function(i) {
       df <- db |>
         dplyr::filter(mes == i) |>
-        dplyr::group_by(cd_procedimento, termo, ano, mes, {{ group_by_var }}) |>
+        dplyr::group_by(cd_procedimento, ano, mes, {{ group_by_var }}) |>
         dplyr::summarise(
           tot_qt = sum(qt_item_evento_informado, na.rm = TRUE),
           tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
@@ -263,7 +242,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
             .(uf_prestador = complete_vars),
             on = x
           ],
-          by = .(cd_procedimento, termo, ano, mes) # completando UF's faltantes
+          by = .(cd_procedimento, ano, mes) # completando UF's faltantes
         ]
       } else if (x == "faixa_etaria") {
         df <- df[
@@ -272,7 +251,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
             .(faixa_etaria = complete_vars),
             on = x
           ],
-          by = .(cd_procedimento, termo, ano, mes) # completando faixas etárias faltantes
+          by = .(cd_procedimento, faixa_etaria, ano, mes) # completando faixas etárias faltantes
         ]
       } else {
         df <- df[
@@ -281,7 +260,7 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
             .(sexo = complete_vars),
             on = x
           ],
-          by = .(cd_procedimento, termo, ano, mes) # completando sexos faltantes
+          by = .(cd_procedimento, sexo, ano, mes) # completando sexos faltantes
         ]
       }
 
@@ -303,7 +282,10 @@ export_parquet <- function(x, complete_vars, db_name, export_name, type, months)
         new = "categoria"
       )
 
-      arrow::write_parquet(df, glue::glue("output/export/{export_name}_{i}.parquet"))
+      arrow::write_parquet(
+        df,
+        glue::glue("output/export/{export_name}_{i}.parquet")
+      )
     }
   )
 

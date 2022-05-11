@@ -4,6 +4,8 @@
 
 # bibliotecas, funções e parâmetros ---------------------------------------
 
+# MUDAR MOMENTO DO JOIN COM TABELA TUSS
+
 source("R/0_libraries.R")
 source("R/0_functions.R")
 
@@ -28,7 +30,8 @@ urls_base <- c(
   amb = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/"
 )
 
-tuss <- arrow::read_parquet("data/tabelas_tuss.parquet")
+termos <- arrow::read_parquet("data/tabelas_tuss.parquet") |>
+  dplyr::pull(cd_procedimento)
 
 # função de download ------------------------------------------------------
 
@@ -114,7 +117,7 @@ for (j in c("hosp", "amb")) {
           merge_db(
             path_1 = det_db[i],
             path_2 = cons_db[i],
-            termos = tuss
+            termos = termos
           )
 
           gc()
@@ -130,9 +133,10 @@ for (j in c("hosp", "amb")) {
 
       estatisticas <- list(
         cols = c("uf_prestador", "faixa_etaria", "sexo"),
-        names = glue::glue("base_{j}_{c('uf', 'idade', 'sexo')}_{ano}"),
-        types = c("uf", "faixa etária", "sexo")
+        names = glue::glue("base_{j}_{c('uf_prestador', 'idade', 'sexo')}_{ano}")
       )
+
+      fs::dir_create("output/export")
 
       purrr::walk(
         1:3,
@@ -140,27 +144,20 @@ for (j in c("hosp", "amb")) {
           x = estatisticas$cols[.x],
           complete_vars = parametros[[.x]],
           export_name = estatisticas$names[.x],
-          type = estatisticas$types[.x],
           db_name = glue::glue("proc_{j}_db"),
           months = months
         )
       )
 
-      base_hosp <- purrr::map(
-        fs::dir_ls("output/export/"),
-        ~ arrow::read_parquet(.x) |>
-          dplyr::collect()
-      ) |>
-        data.table::rbindlist()
+      db <- arrow::open_dataset("data/proc_hosp_db/") |>
+        dplyr::collect()
 
-      base_hosp[, .(termos = collapse::funique(termo))] |>
-        arrow::write_parquet(glue::glue("output/termos_{j}_{ano}.parquet"))
+      arrow::write_parquet(db, glue::glue("output/base_{j}_{ano}.parquet"))
 
-      arrow::write_parquet(base_hosp, glue::glue("output/base_{j}_{ano}.parquet"))
-
-      fs::dir_delete("output/export/")
-
-      fs::dir_delete(glue::glue("data/proc_{j}_db/"))
+      purrr::walk(
+        c("output/export/", glue::glue("data/proc_{j}_db/")),
+        fs::dir_delete
+      )
 
       gc()
     }
