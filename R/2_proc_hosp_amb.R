@@ -7,7 +7,7 @@
 source("R/0_libraries.R")
 source("R/0_functions.R")
 
-future::plan("multicore")
+future::plan("multisession")
 
 years <- 2018:2020
 
@@ -28,7 +28,7 @@ urls_base <- c(
 
 # função de download ------------------------------------------------------
 
-vec <- c("amb")
+vec <- c("hosp", "amb")
 
 for (j in vec) {
   purrr::walk(

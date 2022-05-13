@@ -22,7 +22,16 @@ db <- list(
 db <- purrr::map2(
   .x = db,
   .y = c("hosp", "amb"),
-  ~ .x[, db := .y]
+  ~ .x[
+    ,
+    db := .y
+  ][
+    ,
+    ":="(
+      ano = as.integer(ano),
+      mes = as.integer(mes)
+    )
+  ]
 ) |>
   data.table::rbindlist() |>
   dtplyr::lazy_dt(key_by = "cd_procedimento")
@@ -42,20 +51,8 @@ db |>
     partitioning = c("db", "ano")
   )
 
-db <- db |>
-  dplyr::mutate(mes = forcats::as_factor(mes)) |>
-  tidyr::complete(
-    cd_procedimento, tipo, db, categoria, ano, mes,
-    fill = list(
-      tot_qt = 0,
-      tot_vl = 0,
-      mean_vl = 0
-    )
-  ) |>
-  data.table::as.data.table()
-
 arrow::write_dataset(
-  db,
+  data.table::as.data.table(db),
   "output/db_shiny",
   format = "parquet",
   partitioning = c("db", "tipo")

@@ -36,6 +36,11 @@ vars_shiny <- list(
   estatistica = c("Quantidade total", "Valor total", "Valor médio")
 )
 
+categorias <- fs::dir_ls("data/aux_files/", regexp = "*.csv") |>
+  purrr::map(readr::read_csv, show_col_types = FALSE)
+
+names(categorias) <- stringr::str_extract(names(categorias), "(?<=files/)(.*)(?=\\.csv)")
+
 # adicionar tabela com os 10 procedimentos mais realizados no ano
 
 # header ------------------------------------------------------------------
@@ -136,15 +141,15 @@ body <- bs4Dash::dashboardBody(
   ),
   shiny::fluidRow(
     bs4Dash::infoBoxOutput(
-      width = 3,
+      width = 4,
       "proc"
     ),
     bs4Dash::infoBoxOutput(
-      width = 3,
+      width = 4,
       "qtd_tot"
     ),
     bs4Dash::infoBoxOutput(
-      width = 3,
+      width = 4,
       "vl_tot"
     )
   ),
@@ -208,13 +213,6 @@ server <- function(input, output, session) {
 
   # reactive variables ----------------------------------------------------
 
-  # option_procedimento = "ANATOMIA PATOLÓGICA E CITOPATOLOGIA"
-  # option_ano = "2019"
-  # option_estatistica = "Quantidade total"
-  # option_categoria = "UF Prestador"
-  # option_db = "amb"
-  # infoboxes_db = "amb"
-
   option_base_procedimentos <- shiny::eventReactive(
     input$busca,
     {
@@ -232,7 +230,7 @@ server <- function(input, output, session) {
   option_ano <- shiny::eventReactive(
     input$busca,
     {
-      input$ano
+      as.integer(input$ano)
     }
   )
 
@@ -286,14 +284,20 @@ server <- function(input, output, session) {
   dados_anuais <- shiny::reactive({
     estatistica <- as.symbol(option_estatistica())
 
-    periodo <- paste0("1-", 1:12, "-", option_ano())
+    cd_procedimento_termos <- termos |>
+      dplyr::filter(
+        db == option_db(),
+        termo == option_procedimento(),
+        ano == option_ano()
+      ) |>
+      dplyr::pull(cd_procedimento)
 
     dados_anuais <- db |>
       dplyr::filter(
         db == option_db(),
         tipo == janitor::make_clean_names(option_categoria()),
-        termo == option_procedimento(),
-        mes_ano %in% periodo
+        cd_procedimento == cd_procedimento_termos,
+        ano == option_ano()
       ) |>
       dplyr::rename(
         `Quantidade total` = tot_qt,
@@ -311,8 +315,40 @@ server <- function(input, output, session) {
     }
 
     dados_anuais <- dados_anuais |>
-      dplyr::ungroup() |>
       dplyr::collect()
+
+    if (option_categoria() == "UF Prestador") {
+      dados_anuais <- dados_anuais |>
+        dplyr::mutate(categoria = factor(
+          categoria,
+          levels = purrr::flatten_chr(categorias$estados[1])
+        ))
+    } else if (option_categoria() == "Faixa etária") {
+      dados_anuais <- dados_anuais |>
+        dplyr::mutate(categoria = factor(
+          categoria,
+          levels = purrr::flatten_chr(categorias$faixas)
+        ))
+    } else {
+      dados_anuais <- dados_anuais |>
+        dplyr::mutate(categoria = factor(
+          categoria,
+          levels = purrr::flatten_chr(categorias$sexos)
+        ))
+    }
+
+    dados_anuais <- dados_anuais |>
+      tidyr::complete(categoria) |>
+      dplyr::mutate({{ estatistica }} := tidyr::replace_na({{ estatistica }}, 0))
+
+    if (option_categoria() == "Faixa etária") {
+      dados_anuais <- dados_anuais |>
+        dplyr::arrange(categoria)
+    } else {
+      dados_anuais <- dados_anuais |>
+        dplyr::mutate(categoria := forcats::fct_reorder(categoria, {{ estatistica }})) |>
+        dplyr::arrange(categoria)
+    }
 
     return(dados_anuais)
   })
@@ -320,23 +356,29 @@ server <- function(input, output, session) {
   # dados mensais ---------------------------------------------------------
 
   dados_mensais <- shiny::reactive({
-    periodo <- paste0("1-", 1:12, "-", option_ano())
-
     estatistica <- as.symbol(option_estatistica())
+
+    cd_procedimento_termos <- termos |>
+      dplyr::filter(
+        db == option_db(),
+        termo == option_procedimento(),
+        ano == option_ano()
+      ) |>
+      dplyr::pull(cd_procedimento)
 
     dados_mensais <- db |>
       dplyr::filter(
         db == option_db(),
         tipo == janitor::make_clean_names(option_categoria()),
-        termo == option_procedimento(),
-        mes_ano %in% periodo
+        cd_procedimento == cd_procedimento_termos,
+        ano == option_ano()
       ) |>
       dplyr::rename(
         `Quantidade total` = tot_qt,
         `Valor total` = tot_vl,
         `Valor médio` = mean_vl
       ) |>
-      dplyr::group_by(categoria, mes_ano)
+      dplyr::group_by(categoria, ano, mes)
 
     if (option_estatistica() %in% c(vars_shiny$estatistica[1:2])) {
       dados_mensais <- dados_mensais |>
@@ -348,54 +390,77 @@ server <- function(input, output, session) {
 
     if (option_categoria() == "UF Prestador") {
       dados_mensais <- dados_mensais |>
-        arrow::to_duckdb() |>
-        dplyr::mutate(
-          categoria = dplyr::case_when(
-            categoria %in% c("AC", "AM", "AP", "PA", "RO", "RR", "TO") ~ "Norte",
-            categoria %in% c("AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE") ~ "Nordeste",
-            categoria %in% c("DF", "GO", "MS", "MT") ~ "Centro-Oeste",
-            categoria %in% c("RS", "SC", "PR") ~ "Sul",
-            TRUE ~ "Sudeste"
-          )
+        dplyr::left_join(
+          categorias$estados,
+          by = c("categoria" = "estados")
         ) |>
-        dplyr::group_by(categoria, mes_ano)
+        dplyr::select(-categoria) |>
+        dplyr::rename(categoria = regiao) |>
+        dplyr::group_by(categoria, ano, mes)
 
       if (option_estatistica() %in% c(vars_shiny$estatistica[1:2])) {
         dados_mensais <- dados_mensais |>
-          dplyr::summarise({{ estatistica }} := sum(
-            {{ estatistica }},
-            na.rm = TRUE
-          ))
+          dplyr::summarise({{ estatistica }} := sum({{ estatistica }}))
       } else {
         dados_mensais <- dados_mensais |>
-          dplyr::summarise(
-            {{ estatistica }} := mean(
-              {{ estatistica }},
-              na.rm = TRUE
-            )
-          )
+          dplyr::summarise({{ estatistica }} := mean({{ estatistica }}))
       }
+
+      dados_mensais <- dados_mensais |>
+        dplyr::collect() |>
+        dplyr::mutate(categoria = factor(
+          categoria,
+          levels = unique(purrr::flatten_chr(categorias$estados[2]))
+        ))
+    } else if (option_categoria() == "Faixa etária") {
+      dados_mensais <- dados_mensais |>
+        dplyr::collect() |>
+        dplyr::mutate(categoria = factor(
+          categoria,
+          levels = purrr::flatten_chr(categorias$faixas)
+        ))
+    } else {
+      dados_mensais <- dados_mensais |>
+        dplyr::collect() |>
+        dplyr::mutate(categoria = factor(
+          categoria,
+          levels = purrr::flatten_chr(categorias$sexos)
+        ))
     }
 
     dados_mensais <- dados_mensais |>
-      dplyr::collect()
+      dplyr::ungroup() |>
+      dplyr::mutate(mes = factor(mes, levels = 1:12)) |>
+      dplyr::group_by(ano) |>
+      tidyr::complete(categoria, mes) |>
+      dplyr::mutate({{ estatistica }} := tidyr::replace_na({{ estatistica }}, 0))
 
     return(dados_mensais)
   })
 
   # info boxes ------------------------------------------------------------
 
+  db_name <- shiny::reactive({
+    if (infoboxes_db() == "hosp") {
+      db_name <- "hospitalares"
+    } else {
+      db_name <- "ambulatoriais"
+    }
+
+    return(db_name)
+  })
+
   output$proc <- bs4Dash::renderInfoBox({
-    periodo <- paste0("1-1-", input$ano)
+    input_ano <- as.integer(input$ano)
 
     n <- termos |>
-      dplyr::filter(ano == periodo & db == infoboxes_db()) |>
-      dplyr::summarise(n = n()) |>
+      dplyr::filter(ano == input_ano & db == infoboxes_db()) |>
+      dplyr::tally() |>
       dplyr::collect() |>
       dplyr::pull()
 
     bs4Dash::infoBox(
-      title = shiny::HTML("Nº de procedimentos disponíveis para consulta:"),
+      title = shiny::HTML(glue::glue("Nº de procedimentos {db_name()} disponíveis para consulta:")),
       value = prettyNum(n, big.mark = "\\."),
       icon = shiny::icon("notes-medical", lib = "font-awesome"),
       color = "primary"
@@ -403,16 +468,15 @@ server <- function(input, output, session) {
   })
 
   output$qtd_tot <- bs4Dash::renderInfoBox({
-    periodo <- paste0("1-", 1:12, "-", input$ano)
+    input_ano <- as.integer(input$ano)
 
     qtd_tot <- db |>
       dplyr::filter(
-        mes_ano %in% periodo,
+        ano == input_ano,
         db == infoboxes_db(),
         tipo == "sexo"
       ) |>
       dplyr::summarise(tot_qt = sum(tot_qt)) |>
-      dplyr::collect() |>
       dplyr::pull()
 
     qtd_tot_pretty <- prettyNum(
@@ -452,7 +516,7 @@ server <- function(input, output, session) {
     }
 
     bs4Dash::infoBox(
-      title = shiny::HTML("Quantidade de procedimentos realizados durante o ano:"),
+      title = shiny::HTML(glue::glue("Procedimentos {db_name()} realizados durante o ano:")),
       value = qtd_tot,
       icon = shiny::icon("calendar", lib = "font-awesome"),
       color = "orange"
@@ -460,16 +524,15 @@ server <- function(input, output, session) {
   })
 
   output$vl_tot <- bs4Dash::renderInfoBox({
-    periodo <- paste0("1-", 1:12, "-", input$ano)
+    input_ano <- as.integer(input$ano)
 
     vl_tot <- db |>
       dplyr::filter(
-        mes_ano %in% periodo,
+        ano == input_ano,
         db == infoboxes_db(),
         tipo == "sexo"
       ) |>
       dplyr::summarise(vl_tot = sum(tot_vl)) |>
-      dplyr::collect() |>
       dplyr::pull()
 
     vl_tot_pretty <- prettyNum(
@@ -509,7 +572,7 @@ server <- function(input, output, session) {
     }
 
     bs4Dash::infoBox(
-      title = shiny::HTML("Valor total gasto em procedimentos no ano:"),
+      title = shiny::HTML(glue::glue("Valor total gasto em procedimentos {db_name()} no ano:")),
       value = vl_tot,
       icon = shiny::icon("coins", lib = "font-awesome"),
       color = "lightblue"
@@ -519,27 +582,7 @@ server <- function(input, output, session) {
   # bar plot --------------------------------------------------------------
 
   output$bar <- plotly::renderPlotly({
-    estatistica <- as.symbol(option_estatistica())
-
-    if (option_categoria() == "Faixa etária") {
-      plot_bar <- dados_anuais() |>
-        dplyr::mutate(
-          categoria = forcats::as_factor(categoria),
-          categoria = forcats::fct_relevel(
-            categoria,
-            c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
-          )
-        )
-    } else {
-      plot_bar <- dados_anuais() |>
-        dplyr::mutate(
-          categoria = forcats::as_factor(categoria),
-          categoria := forcats::fct_reorder(categoria, {{ estatistica }})
-        )
-    }
-
-    plot_bar <- plot_bar |>
-      dplyr::arrange(categoria) |>
+    plot_bar <- dados_anuais() |>
       ggplot() +
       geom_col(
         aes_string(
@@ -636,32 +679,26 @@ server <- function(input, output, session) {
     plotly::ggplotly(plot_map)
   })
 
-  # time series per region plot -------------------------------------------
+  # time series plot -------------------------------------------
 
   output$ts <- plotly::renderPlotly({
-    if (option_categoria() == "Faixa etária") {
-      plot_line <- dados_mensais() |>
-        dplyr::mutate(
-          categoria = forcats::as_factor(categoria),
-          categoria = forcats::fct_relevel(
-            categoria,
-            c("< 1", "1 a 4", "5 a 9", "10 a 14", "15 a 19", "20 a 29", "30 a 39", "40 a 49", "50 a 59", "60 a 69", "70 a 79", "80 <", "N. I.")
-          )
-        )
-    } else {
-      plot_line <- dados_mensais() |>
-        dplyr::mutate(categoria = forcats::as_factor(categoria))
-    }
-
     plot_line <- dados_mensais() |>
-      dplyr::mutate(mes_ano = lubridate::dmy(mes_ano)) |>
+      dplyr::ungroup() |>
+      dplyr::mutate(
+        data = glue::glue("{mes}-{ano}") |>
+          as.character() |>
+          lubridate::my()
+      ) |>
+      dplyr::select(-c(ano, mes))
+
+    plot_line <- plot_line |>
       ggplot() +
       geom_line(
         aes_string(
-          x = names(dados_mensais())[2],
-          y = glue::glue("`{names(dados_mensais())[3]}`"),
-          group = names(dados_mensais())[1],
-          color = names(dados_mensais())[1]
+          x = names(plot_line)[3],
+          y = glue::glue("`{names(plot_line)[2]}`"),
+          group = names(plot_line)[1],
+          color = names(plot_line)[1]
         ),
         size = 0.5
       ) +
@@ -677,7 +714,6 @@ server <- function(input, output, session) {
       theme_minimal() +
       theme(
         legend.position = "right",
-        legend.title = element_blank(),
         text = element_text(
           size = 10,
           family = "Open Sans"
@@ -691,7 +727,7 @@ server <- function(input, output, session) {
       ggtitle(
         stringr::str_to_upper(
           glue::glue(
-            "{option_estatistica()} do procedimento por região (jan - dez/{option_ano()})"
+            "{option_estatistica()} do procedimento por {option_categoria()} (jan - dez/{option_ano()})"
           )
         )
       )
@@ -730,11 +766,11 @@ server <- function(input, output, session) {
         dplyr::filter(db == "amb")
     }
 
-    periodo <- paste0("1-1-", input$ano)
+    input_ano <- as.integer(input$ano)
 
     options <- options |>
-      dplyr::filter(ano == periodo) |>
-      dplyr::select(termos) |>
+      dplyr::filter(ano == input_ano) |>
+      dplyr::select(termo) |>
       dplyr::collect() |>
       purrr::flatten_chr()
 
