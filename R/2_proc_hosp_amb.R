@@ -7,21 +7,19 @@
 source("R/0_libraries.R")
 source("R/0_functions.R")
 
-future::plan("multisession")
+future::plan("multicore")
 
-ano <- 2018:2020
+years <- 2018:2020
 
 months <- c(paste0("0", 1:9), 10:12)
 
-estados <- readr::read_csv("data/aux_files/estados.csv") |> purrr::flatten_chr()
+estados <- readr::read_csv(
+  "data/aux_files/estados.csv",
+  show_col_types = FALSE
+) |>
+  purrr::flatten_chr()
 
 bases <- c("DET", "CONS")
-
-parametros <- list(
-  estados = estados,
-  faixas = readr::read_csv("data/aux_files/faixas.csv") |> purrr::flatten_chr(),
-  sexos = readr::read_csv("data/aux_files/sexos.csv") |> purrr::flatten_chr()
-)
 
 urls_base <- c(
   hosp = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
@@ -30,18 +28,20 @@ urls_base <- c(
 
 # função de download ------------------------------------------------------
 
-for (j in c("hosp", "amb")) {
+vec <- c("amb")
+
+for (j in vec) {
   purrr::walk(
-    ano,
-    function(ano) {
+    years,
+    function(year) {
       # definindo termos da buscas no dados abertos -----------------------
 
-      cat(glue::glue("\n========== BASE: {stringr::str_to_upper(j)}, ANO: {ano} ==========\n"))
+      cat(glue::glue("\n========== BASE: {stringr::str_to_upper(j)}, year: {year} ==========\n"))
 
       urls <- purrr::map(
         bases,
         ~ base(
-          ano = ano,
+          ano = year,
           estado = estados,
           mes = months,
           base = .x,
@@ -127,7 +127,7 @@ for (j in c("hosp", "amb")) {
 
       estatisticas <- list(
         cols = c("uf_prestador", "faixa_etaria", "sexo"),
-        names = glue::glue("base_{j}_{c('uf_prestador', 'idade', 'sexo')}_{ano}")
+        names = glue::glue("base_{j}_{c('uf', 'idade', 'sexo')}_{year}")
       )
 
       fs::dir_create("output/export")
@@ -136,7 +136,6 @@ for (j in c("hosp", "amb")) {
         1:3,
         ~ export_parquet(
           x = estatisticas$cols[.x],
-          complete_vars = parametros[[.x]],
           export_name = estatisticas$names[.x],
           db_name = glue::glue("proc_{j}_db"),
           months = months
@@ -146,7 +145,7 @@ for (j in c("hosp", "amb")) {
       db <- arrow::open_dataset("output/export") |>
         dplyr::compute()
 
-      arrow::write_parquet(db, glue::glue("output/base_{j}_{ano}.parquet"))
+      arrow::write_parquet(db, glue::glue("output/base_{j}_{year}.parquet"))
 
       gc()
 

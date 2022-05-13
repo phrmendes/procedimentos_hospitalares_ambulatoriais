@@ -207,7 +207,7 @@ bind <- function(a, b, c, d) {
 
 # função de tratamento da database do shinyapp ----------------------------
 
-export_parquet <- function(x, complete_vars, db_name, export_name, months) {
+export_parquet <- function(x, db_name, export_name, months) {
   db <- arrow::open_dataset(glue::glue("data/{db_name}"))
 
   group_by_var <- as.symbol(x)
@@ -240,35 +240,6 @@ export_parquet <- function(x, complete_vars, db_name, export_name, months) {
         dplyr::semi_join(proc_n_nulos, by = "cd_procedimento") |>
         dplyr::collect() |>
         data.table::as.data.table()
-
-      if (x == "uf_prestador") {
-        df <- df[
-          ,
-          .SD[
-            .(uf_prestador = complete_vars),
-            on = x
-          ],
-          by = .(cd_procedimento, ano, mes) # completando UF's faltantes
-        ]
-      } else if (x == "faixa_etaria") {
-        df <- df[
-          ,
-          .SD[
-            .(faixa_etaria = complete_vars),
-            on = x
-          ],
-          by = .(cd_procedimento, ano, mes) # completando faixas etárias faltantes
-        ]
-      } else {
-        df <- df[
-          ,
-          .SD[
-            .(sexo = complete_vars),
-            on = x
-          ],
-          by = .(cd_procedimento, ano, mes) # completando sexos faltantes
-        ]
-      }
 
       df <- df[
         ,

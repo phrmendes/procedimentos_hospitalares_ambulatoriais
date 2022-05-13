@@ -10,7 +10,7 @@ source("R/0_functions.R")
 # bases -------------------------------------------------------------------
 
 tuss <- arrow::read_parquet("data/tabelas_tuss.parquet") |>
-  data.table::as.data.table(key = "cd_procedimento")
+  dtplyr::lazy_dt(key_by = "cd_procedimento")
 
 db <- list(
   base_hosp = fs::dir_ls("output/", regexp = "base_hosp(.*)\\.parquet") |>
@@ -25,17 +25,24 @@ db <- purrr::map2(
   ~ .x[, db := .y]
 ) |>
   data.table::rbindlist() |>
-  data.table::setkey("cd_procedimento")
+  dtplyr::lazy_dt(key_by = "cd_procedimento")
 
-db <- data.table::merge.data.table(
-  db,
-  tuss,
-  by = "cd_procedimento",
-  all.x = TRUE
-)
+db |>
+  dplyr::left_join(
+    tuss,
+    by = "cd_procedimento"
+  ) |>
+  dplyr::filter(!is.na(termo) | termo != "sem_info") |>
+  dplyr::select(cd_procedimento, termo, ano, db) |>
+  dplyr::distinct() |>
+  data.table::as.data.table() |>
+  arrow::write_dataset(
+    "output/db_termos_shiny",
+    format = "parquet",
+    partitioning = c("db", "ano")
+  )
 
 db <- db |>
-  dtplyr::lazy_dt() |>
   dplyr::mutate(mes = forcats::as_factor(mes)) |>
   tidyr::complete(
     cd_procedimento, tipo, db, categoria, ano, mes,
@@ -47,28 +54,11 @@ db <- db |>
   ) |>
   data.table::as.data.table()
 
-db[is.na(termo), termo := "sem_info"]
-
-termos <- db[
-  termo != "sem_info",
-  c("cd_procedimento", "termo", "ano", "db")
-] |>
-  collapse::funique(
-    cols = c("cd_procedimento", "termo", "ano", "db")
-  )
-
 arrow::write_dataset(
   db,
   "output/db_shiny",
   format = "parquet",
   partitioning = c("db", "tipo")
-)
-
-arrow::write_dataset(
-  termos,
-  "output/db_termos_shiny",
-  format = "parquet",
-  partitioning = c("db", "ano")
 )
 
 zip::zip(
