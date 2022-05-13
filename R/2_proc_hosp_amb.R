@@ -4,8 +4,6 @@
 
 # bibliotecas, funções e parâmetros ---------------------------------------
 
-# MUDAR MOMENTO DO JOIN COM TABELA TUSS
-
 source("R/0_libraries.R")
 source("R/0_functions.R")
 
