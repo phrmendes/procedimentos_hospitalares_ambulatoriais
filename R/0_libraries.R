@@ -1,6 +1,6 @@
-# ------------------- #
-# --- BIBLIOTECAS --- #
-# ------------------- #
+# ----------------- #
+# --- LIBRARIES --- #
+# ----------------- #
 
 if (!require("pacman")) {
   install.packages("pacman")
