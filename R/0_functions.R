@@ -1,14 +1,14 @@
-# --------------- #
-# --- FUNÇÕES --- #
-# --------------- #
+# ----------------- #
+# --- FUNCTIONS --- #
+# ----------------- #
 
-# função para seleção de bases por ano, estado, mês e período -------------
+# função de criação de urls do ftp ----------------------------------------
 
-base <- function(ano, estado, mes, base, url_base, proc) {
+urls_ftp_ans <- function(year, uf, months, base, ftp_url, proc) {
   urls <- tibble::tibble(
-    a = glue::glue("{url_base}{ano}/"),
-    b = estado,
-    c = glue::glue("_{ano}"),
+    a = glue::glue("{ftp_url}{year}/"),
+    b = uf,
+    c = glue::glue("_{year}"),
   ) |>
     dplyr::group_by(a, b, c) |>
     tidyr::nest()
@@ -20,9 +20,9 @@ base <- function(ano, estado, mes, base, url_base, proc) {
         data = purrr::map(
           data,
           ~ tibble::tibble(
-            e = mes,
+            e = months,
             f = glue::glue("_{proc}_{base}.zip"),
-            date = glue::glue("{mes}-{ano}")
+            date = glue::glue("{months}-{year}")
           )
         )
       )
@@ -33,7 +33,7 @@ base <- function(ano, estado, mes, base, url_base, proc) {
         data = purrr::map(
           data,
           ~ tibble::tibble(
-            e = mes,
+            e = months,
             f = glue::glue("_{proc}_{base}.zip")
           )
         )
@@ -50,9 +50,9 @@ base <- function(ano, estado, mes, base, url_base, proc) {
   return(urls)
 }
 
-# função de descompactação, leitura e escrita na database (hosp) ----------
+# função de descompactação, leitura e escrita em parquets -----------------
 
-unpack_write_parquet <- function(url, date, cols) {
+unpack_write <- function(url, date, cols) {
   tempdir <- fs::dir_create(glue::glue("{tempdir()}/downloads"))
 
   temp <- tempfile(fileext = ".zip", tmpdir = tempdir)
@@ -144,7 +144,7 @@ unpack_write_parquet <- function(url, date, cols) {
 
 # função de merge mês a mês -----------------------------------------------
 
-merge_db <- function(path_1, path_2) {
+merge_parquets <- function(path_1, path_2) {
 
   db_1 <- arrow::open_dataset(path_1)
 
@@ -162,7 +162,7 @@ merge_db <- function(path_1, path_2) {
     "(?<=/parquet/)(.*)(?=\\_DET.parquet$)"
   )
 
-  db <- stringr::str_to_lower(
+  db_name <- stringr::str_to_lower(
     stringr::str_extract(
       name,
       "([:alpha:]{3}|[:alpha:]{4})$"
@@ -171,7 +171,7 @@ merge_db <- function(path_1, path_2) {
 
   arrow::write_parquet(
     db_3,
-    glue::glue("data/proc_{db}_db/{name}.parquet")
+    glue::glue("data/{db_name}_db/{name}.parquet")
   )
 
   purrr::walk(
@@ -207,7 +207,7 @@ bind <- function(a, b, c, d) {
 
 # função de tratamento da database do shinyapp ----------------------------
 
-export_parquet <- function(x, db_name, export_name, months) {
+export_parquets <- function(x, db_name, export_name, months) {
   db <- arrow::open_dataset(glue::glue("data/{db_name}"))
 
   group_by_var <- as.symbol(x)
@@ -223,35 +223,12 @@ export_parquet <- function(x, db_name, export_name, months) {
           tot_vl = sum(vl_item_evento_informado, na.rm = TRUE)
         ) |>
         dplyr::ungroup() |>
-        dplyr::mutate(mean_vl = tot_vl / tot_qt) |>
-        dplyr::compute()
-
-      proc_n_nulos <- df |>
-        dplyr::group_by(cd_procedimento) |>
-        dplyr::summarise(
-          tot_qt = sum(tot_qt, na.rm = TRUE),
-          tot_vl = sum(tot_vl, na.rm = TRUE),
-          mean_vl = sum(mean_vl, na.rm = TRUE)
+        dplyr::mutate(
+          mean_vl = tot_vl / tot_qt,
+          tipo = x
         ) |>
-        dplyr::filter(tot_qt != 0 & tot_vl != 0 & mean_vl != 0) |>
-        dplyr::select(cd_procedimento)
-
-      df <- df |>
-        dplyr::semi_join(proc_n_nulos, by = "cd_procedimento") |>
         dplyr::collect() |>
         data.table::as.data.table()
-
-      df <- df[
-        ,
-        tipo := x
-      ][
-        ,
-        furrr::future_map(
-          .SD,
-          collapse::replace_NA,
-          value = 0
-        )
-      ]
 
       data.table::setnames(
         df,
