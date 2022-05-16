@@ -1,8 +1,8 @@
-# ---------------------------------------------------------------------- #
-# --- BASE CONSOLIDADA DE PROCEDIMENTOS HOSPITALARES E AMBULATORIAIS --- #
-# ---------------------------------------------------------------------- #
+# -------------------------------------------------------------- #
+# --- DATABASE DE PROCEDIMENTOS HOSPITALARES E AMBULATORIAIS --- #
+# -------------------------------------------------------------- #
 
-# bibliotecas, funções e parâmetros ---------------------------------------
+# bibliotecas, funções, parâmetros e variáveis ----------------------------
 
 source("R/0_libraries.R")
 source("R/0_functions.R")
@@ -13,39 +13,42 @@ years <- 2018:2020
 
 months <- c(paste0("0", 1:9), 10:12)
 
-estados <- readr::read_csv(
+ufs <- readr::read_csv(
   "data/aux_files/estados.csv",
   show_col_types = FALSE
 ) |>
   purrr::flatten_chr()
 
-bases <- c("DET", "CONS")
+types_db <- c("DET", "CONS")
 
-urls_base <- c(
+ftp_urls <- c(
   hosp = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/HOSPITALAR/",
   amb = "http://ftp.dadosabertos.ans.gov.br/FTP/PDA/TISS/AMBULATORIAL/"
 )
 
-# função de download ------------------------------------------------------
+tuss <- arrow::read_parquet("data/tabelas_tuss.parquet") |>
+  dtplyr::lazy_dt(key_by = "cd_procedimento")
 
 vec <- c("hosp", "amb")
+
+# download e tratamento de dados ------------------------------------------
 
 for (j in vec) {
   purrr::walk(
     years,
-    function(year) {
+    function(i) {
       # definindo termos da buscas no dados abertos -----------------------
 
-      cat(glue::glue("\n========== BASE: {stringr::str_to_upper(j)}, year: {year} ==========\n"))
+      cat(glue::glue("\n========== DB: {stringr::str_to_upper(j)} - YEAR: {i} ==========\n"))
 
       urls <- purrr::map(
-        bases,
-        ~ base(
-          ano = year,
-          estado = estados,
-          mes = months,
+        types_db,
+        ~ urls_ftp_ans(
+          year = i,
+          uf = ufs,
+          months = months,
           base = .x,
-          url_base = glue::glue("{urls_base[j]}"),
+          ftp_url = glue::glue("{ftp_urls[j]}"),
           proc = stringr::str_to_upper(j)
         )
       )
@@ -59,7 +62,7 @@ for (j in vec) {
       pbapply::pblapply(
         seq_len(nrow(urls[[1]])),
         function(i) {
-          unpack_write_parquet(
+          unpack_write(
             url = urls[[1]]$url[i],
             date = urls[[1]]$date[i],
             cols = c(
@@ -100,7 +103,7 @@ for (j in vec) {
 
       cat("\n===== MERGE =====\n")
 
-      fs::dir_create(glue::glue("data/proc_{j}_db/"))
+      fs::dir_create(glue::glue("data/{j}_db/"))
 
       det_db <- fs::dir_ls(path = "data/parquet/", regexp = "*DET.parquet")
 
@@ -108,10 +111,10 @@ for (j in vec) {
 
       pbapply::pblapply(
         seq_len(length(det_db)),
-        function(i) {
-          merge_db(
-            path_1 = det_db[i],
-            path_2 = cons_db[i]
+        function(k) {
+          merge_parquets(
+            path_1 = det_db[k],
+            path_2 = cons_db[k]
           )
 
           gc()
@@ -125,19 +128,19 @@ for (j in vec) {
 
       cat("\n===== EXPORT =====\n")
 
-      estatisticas <- list(
+      par <- list(
         cols = c("uf_prestador", "faixa_etaria", "sexo"),
-        names = glue::glue("base_{j}_{c('uf', 'idade', 'sexo')}_{year}")
+        names = glue::glue("{j}_{c('uf', 'idade', 'sexo')}_{i}")
       )
 
       fs::dir_create("output/export")
 
       purrr::walk(
         1:3,
-        ~ export_parquet(
-          x = estatisticas$cols[.x],
-          export_name = estatisticas$names[.x],
-          db_name = glue::glue("proc_{j}_db"),
+        ~ export_parquets(
+          x = par$cols[.x],
+          export_name = par$names[.x],
+          db_name = glue::glue("{j}_db"),
           months = months
         )
       )
@@ -145,14 +148,73 @@ for (j in vec) {
       db <- arrow::open_dataset("output/export") |>
         dplyr::compute()
 
-      arrow::write_parquet(db, glue::glue("output/base_{j}_{year}.parquet"))
+      arrow::write_parquet(
+        db,
+        glue::glue("output/{j}_{i}.parquet")
+      )
 
       gc()
 
       purrr::walk(
-        c("output/export/", glue::glue("data/proc_{j}_db/")),
+        c("output/export/", glue::glue("data/{j}_db/")),
         fs::dir_delete
       )
     }
   )
 }
+
+# arrow datasets ----------------------------------------------------------
+
+db <- list(
+  base_hosp = fs::dir_ls("output/", regexp = "hosp(.*)\\.parquet") |>
+    purrr::map_dfr(arrow::read_parquet),
+  base_amb = fs::dir_ls("output/", regexp = "amb(.*)\\.parquet") |>
+    purrr::map_dfr(arrow::read_parquet)
+)
+
+db <- purrr::map2(
+  .x = db,
+  .y = c("hosp", "amb"),
+  ~ .x[
+    ,
+    db := .y
+  ][
+    ,
+    ":="(
+      ano = as.integer(ano),
+      mes = as.integer(mes)
+    )
+  ]
+) |>
+  data.table::rbindlist() |>
+  dtplyr::lazy_dt(key_by = "cd_procedimento")
+
+db |>
+  dplyr::left_join(
+    tuss,
+    by = "cd_procedimento"
+  ) |>
+  dplyr::filter(!is.na(termo) | termo != "sem_info") |>
+  dplyr::select(cd_procedimento, termo, ano, db) |>
+  dplyr::distinct() |>
+  data.table::as.data.table() |>
+  arrow::write_dataset(
+    "output/db_termos_shiny",
+    format = "parquet",
+    partitioning = c("db", "ano")
+  )
+
+arrow::write_dataset(
+  data.table::as.data.table(db),
+  "output/db_shiny",
+  format = "parquet",
+  partitioning = c("db", "tipo")
+)
+
+zip::zip(
+  zipfile = fs::file_create("output/bkp_db.zip"),
+  files = fs::dir_ls("output/", regexp = ".parquet")
+)
+
+fs::dir_ls("output/", regexp = "(hosp|amb)(.*)\\.parquet") |>
+  fs::file_delete()
