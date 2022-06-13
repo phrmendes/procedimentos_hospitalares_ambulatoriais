@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+data/proc*
+data/parquet
+proc-hosp-amb-71047092ca8c.json
+output/bkp_db.zip
+
+procedimentos.zip
