@@ -30,5 +30,6 @@ pacman::p_load(
   miniUI,
   parallel,
   lintr,
+  rsconnect,
   install = FALSE
 )
