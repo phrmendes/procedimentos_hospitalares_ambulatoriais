@@ -17,6 +17,7 @@ ufs <- readr::read_csv(
   "data/aux_files/estados.csv",
   show_col_types = FALSE
 ) |>
+  dplyr::select(estados) |>
   purrr::flatten_chr()
 
 types_db <- c("DET", "CONS")
