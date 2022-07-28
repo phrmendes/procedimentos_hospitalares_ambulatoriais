@@ -9,9 +9,13 @@ COPY app.R /home/shiny/
 
 RUN mkdir /home/shiny/output
 
+RUN mkdir -p /home/shiny/data/aux_files
+
+COPY data/aux_files /home/shiny/data/aux_files
+
 COPY output/ /home/shiny/output
 
-RUN Rscript -e 'install.packages(c("glue", "bs4Dash", "plotly", "MetBrewer", "shinydashboard", "sf", "arrow", "memoise", "tmaptools", "rlang", "shinycssloaders", "sysfonts", "writexl", "geobr"))'
+RUN Rscript -e 'install.packages(c("glue", "bs4Dash", "plotly", "MetBrewer", "shinydashboard", "sf", "arrow", "tmaptools", "rlang", "shinycssloaders", "writexl", "janitor"))'
 
 RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen \
    && locale-gen en_US.utf8 \
