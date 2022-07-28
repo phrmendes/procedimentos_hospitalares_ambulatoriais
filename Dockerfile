@@ -23,10 +23,10 @@ RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen \
 
 # expose port
 
-EXPOSE 3838
+EXPOSE 8000
 
 # run app on container start
 
 CMD ["Rscript", "-e", "shiny::runApp('/home/shiny', host = '0.0.0.0', port = 3838)"]
 
-# docker run --rm -p 3838:3838 pedromendes12/proc_ans:beta_1
+# docker run --rm -p 8000:8000 pedromendes12/proc_ans:beta_1
