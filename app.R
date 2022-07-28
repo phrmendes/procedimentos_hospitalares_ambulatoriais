@@ -12,16 +12,13 @@ library(MetBrewer)
 library(shiny)
 library(sf)
 library(arrow)
-library(duckdb)
 library(tmaptools)
 library(rlang)
 library(shinycssloaders)
-library(sysfonts)
 library(writexl)
 
 options(scipen = 999)
 options(dplyr.summarise.inform = FALSE)
-sysfonts::font_add_google("Open Sans")
 
 # variáveis ---------------------------------------------------------------
 
@@ -40,8 +37,6 @@ categorias <- fs::dir_ls("data/aux_files/", regexp = "*.csv") |>
   purrr::map(readr::read_csv, show_col_types = FALSE)
 
 names(categorias) <- stringr::str_extract(names(categorias), "(?<=files/)(.*)(?=\\.csv)")
-
-# adicionar tabela com os 10 procedimentos mais realizados no ano
 
 # header ------------------------------------------------------------------
 
@@ -74,17 +69,14 @@ body <- bs4Dash::dashboardBody(
       )
     )
   ),
-  h2(
-    "Procedimentos Médicos e Ambulatoriais",
-    style = "font-family: 'Open Sans', sans-serif;"
-  ),
+  h2("Procedimentos Médicos e Ambulatoriais"),
   shiny::fluidRow(
     shiny::column(
       width = 4,
       bs4Dash::box(
         width = NULL,
         collapsible = FALSE,
-        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+        style = "font-size:14px;",
         shiny::selectInput(
           inputId = "base_procedimentos",
           label = "Base de procedimentos",
@@ -104,7 +96,7 @@ body <- bs4Dash::dashboardBody(
       bs4Dash::box(
         width = NULL,
         collapsible = FALSE,
-        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+        style = "font-size:14px;",
         shiny::selectInput(
           inputId = "ano",
           label = "Ano",
@@ -124,7 +116,7 @@ body <- bs4Dash::dashboardBody(
       bs4Dash::box(
         width = NULL,
         collapsible = FALSE,
-        style = "font-size:14px; font-family: 'Open Sans', sans-serif;",
+        style = "font-size:14px;",
         shiny::selectInput(
           inputId = "estatistica",
           label = "Estatística",
@@ -292,10 +284,12 @@ server <- function(input, output, session) {
       ) |>
       dplyr::pull(cd_procedimento)
 
+    tipo_clean_names <- janitor::make_clean_names(option_categoria())
+
     dados_anuais <- db |>
       dplyr::filter(
         db == option_db(),
-        tipo == janitor::make_clean_names(option_categoria()),
+        tipo == tipo_clean_names,
         cd_procedimento == cd_procedimento_termos,
         ano == option_ano()
       ) |>
@@ -366,10 +360,12 @@ server <- function(input, output, session) {
       ) |>
       dplyr::pull(cd_procedimento)
 
+    tipo_clean_names <- janitor::make_clean_names(option_categoria())
+
     dados_mensais <- db |>
       dplyr::filter(
         db == option_db(),
-        tipo == janitor::make_clean_names(option_categoria()),
+        tipo == tipo_clean_names,
         cd_procedimento == cd_procedimento_termos,
         ano == option_ano()
       ) |>
